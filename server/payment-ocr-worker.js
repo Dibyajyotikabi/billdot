@@ -18,6 +18,12 @@ function nativeText() {
   });
 }
 
+const FIELDS = ['amount', 'reference', 'payer', 'receiver', 'paid_on', 'method'];
+const complete = (texts) => {
+  const fields = Object.assign({}, ...texts.map(parsePaymentText));
+  return FIELDS.every((key) => fields[key]);
+};
+
 let worker;
 let fail;
 const failure = new Promise((_, reject) => { fail = reject; });
@@ -26,15 +32,19 @@ const work = (async () => {
     langPath: workerData.langPath, gzip: true, cacheMethod: 'none', errorHandler: fail,
   });
   await worker.setParameters({ tessedit_pageseg_mode: '11' });
-  const { data } = await worker.recognize(Buffer.from(workerData.image));
-  return data.text;
+  const texts = [];
+  // The enhanced copy (high contrast, dark themes flipped) only runs when the original misses something.
+  for (const image of [workerData.image, workerData.enhanced].filter(Boolean)) {
+    if (texts.length && complete(texts)) break;
+    const { data } = await worker.recognize(Buffer.from(image));
+    texts.push(data.text);
+  }
+  return texts;
 })();
 try {
-  const text = await Promise.race([work, failure]);
-  const fields = parsePaymentText(text);
-  const complete = ['amount', 'reference', 'payer', 'receiver', 'paid_on', 'method'].every((key) => fields[key]);
-  const native = complete ? '' : await nativeText();
-  parentPort.postMessage({ text, native_text: native });
+  const texts = await Promise.race([work, failure]);
+  const native = complete(texts) ? '' : await nativeText();
+  parentPort.postMessage({ texts, native_text: native });
 } catch {
   parentPort.postMessage({ error: true });
 } finally {

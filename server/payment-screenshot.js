@@ -25,8 +25,9 @@ export function decodeScreenshot(dataUrl) {
 let busy = false;
 
 // Bundled language data keeps payment screenshots on this computer, even offline.
-export async function extractPaymentScreenshot(dataUrl) {
+export async function extractPaymentScreenshot(dataUrl, enhancedUrl) {
   const bytes = decodeScreenshot(dataUrl);
+  const enhanced = enhancedUrl ? decodeScreenshot(enhancedUrl) : null;
   if (busy) throw new HttpError(429, 'Another screenshot is being read. Try again in a moment.');
   busy = true;
   let worker;
@@ -38,7 +39,7 @@ export async function extractPaymentScreenshot(dataUrl) {
       fs.copyFileSync(path.join(language.langPath, `${language.code}.traineddata.gz`), path.join(languageDir, `${language.code}.traineddata.gz`));
     }
     // Terminating this thread also stops OCR during initialization or recognition.
-    worker = new Worker(new URL('./payment-ocr-worker.js', import.meta.url), { workerData: { image: bytes, langPath: languageDir } });
+    worker = new Worker(new URL('./payment-ocr-worker.js', import.meta.url), { workerData: { image: bytes, enhanced, langPath: languageDir } });
     const result = await new Promise((resolve, reject) => {
       const failed = () => reject(new HttpError(422, 'Could not read this screenshot. Try a clearer image or enter the details.'));
       worker.once('message', (message) => message.error ? failed() : resolve(message));
@@ -46,7 +47,9 @@ export async function extractPaymentScreenshot(dataUrl) {
       worker.once('exit', failed);
       timer = setTimeout(() => reject(new HttpError(408, 'Reading took too long. Try again or enter the details.')), 30_000);
     });
-    return { fields: { ...parsePaymentText(result.native_text || ''), ...parsePaymentText(result.text) }, needs_review: true };
+    // Earlier readings win; later ones only fill fields that are still missing.
+    const readings = [...result.texts, result.native_text || ''].map(parsePaymentText);
+    return { fields: Object.assign({}, ...readings.reverse()), needs_review: true };
   } catch (err) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(422, 'Could not read this screenshot. Try a clearer image or enter the details.');

@@ -1,4 +1,4 @@
-// Payment confirmations: a shareable "payment received" page built from a
+// Payment confirmations: a shareable sent/received payment page built from a
 // UPI screenshot or typed details, optionally tied to an invoice.
 import fs from 'node:fs';
 import path from 'node:path';

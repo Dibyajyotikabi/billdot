@@ -17,7 +17,7 @@ confirmationsRouter.get('/', (req, res) => {
 confirmationsRouter.post('/', (req, res) => res.status(201).json(withLink(createConfirmation(req.body || {}), req)));
 confirmationsRouter.post('/extract', asyncH(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json(await extractPaymentScreenshot(req.body?.image));
+  res.json(await extractPaymentScreenshot(req.body?.image, req.body?.enhanced));
 }));
 confirmationsRouter.get('/:id', (req, res) => res.json(withLink(getConfirmation(v.id(req.params.id)), req)));
 confirmationsRouter.put('/:id', (req, res) => {

@@ -16,13 +16,17 @@ export function parsePaymentText(text = '') {
     const n = Number(value.replace(/,/g, ''));
     return Number.isFinite(n) && n > 0 && n < 1e12 ? n : null;
   };
-  const amountPattern = /(?:\p{Sc}|INR\b|Rs\.?\s*|रु\.?\s*)\s*([\d,]+(?:\.\d{1,2})?)(?!\d)/giu;
+  // OCR often reads ₹ as % or drops it, so a lone grouped number on its own line also counts.
+  const amountPattern = /(?:\p{Sc}|INR\b|Rs\.?\s*|रु\.?\s*|%(?=\s*\d))\s*([\d,]+(?:\.\d{1,2})?)(?!\d)/giu;
   const amounts = [...source.matchAll(amountPattern)].map((m) => amountValue(m[1])).filter((n) => n !== null);
+  const bare = lines.map((line) => /^[^\p{L}\d\s]?\s*(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?)\s*[^\p{L}\d\s]{0,2}$/u.exec(line))
+    .filter(Boolean).map((m) => amountValue(m[1])).filter((n) => n !== null);
   const labelled = /(?:amount(?:\s+(?:paid|received|sent|transferred))?|paid amount|राशि|भुगतान राशि)\s*[:\-]?\s*(?:\p{Sc}|INR|Rs\.?|रु\.?)?\s*([\d,]+(?:\.\d{1,2})?)/iu.exec(source);
+  const marked = new Set([...amounts, ...bare]);
   if (labelled) {
     const n = amountValue(labelled[1]);
     if (n !== null) fields.amount = n;
-  } else if (new Set(amounts).size === 1) fields.amount = amounts[0];
+  } else if (marked.size === 1) [fields.amount] = marked;
 
   // Prefer UTR / UPI reference over an app's internal transaction ID.
   const reference = /(?:\bUTR(?:\s*\/\s*(?:reference|ref))?(?:\s+(?:number|no\.?|ID))?|\bUPI\s+(?:(?:reference|ref\.?)(?:\s+(?:number|no\.?))?|transaction\s+ID)|\bRRN|\b(?:Bank\s+)?reference(?:\s+(?:number|no\.?|ID))?|यूटीआर|यूपीआई (?:संदर्भ|लेनदेन आईडी))\s*[:#\-]?\s*([A-Z0-9][A-Z0-9 -]{5,119})/i.exec(source);
@@ -39,17 +43,20 @@ export function parsePaymentText(text = '') {
   const iso = /\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/.exec(source);
   const numeric = /\b(\d{1,2})[/.\-](\d{1,2})[/.\-](20\d{2})\b/.exec(source);
   const named = /\b(\d{1,2})[\s\-]+([A-Za-z]{3,9})[\s,\-]+(20\d{2})\b/.exec(source);
-  const monthFirst = /\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(20\d{2})\b/.exec(source);
+  const monthFirst = /\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s*(20\d{2})\b/.exec(source);
   const paidOn = iso ? validDate(iso[1], iso[2], iso[3])
     : numeric ? validDate(numeric[3], numeric[2], numeric[1])
       : named ? validDate(named[3], months.indexOf(named[2].slice(0, 3).toLowerCase()) + 1, named[1])
         : monthFirst ? validDate(monthFirst[3], months.indexOf(monthFirst[1].slice(0, 3).toLowerCase()) + 1, monthFirst[2]) : null;
   if (paidOn) fields.paid_on = paidOn;
 
+  // Drop OCR table borders and a trailing amount, as in "Paid to NAME ₹17,100".
+  const clean = (value) => String(value || '').replace(/[|]/g, ' ')
+    .replace(/\s+(?:\p{Sc}|%|Rs\.?)?\s*\d[\d,]*(?:\.\d{1,2})?$/u, '').replace(/\s+/g, ' ').trim();
   for (let i = 0; i < lines.length; i += 1) {
     const payer = /^(?:received from|paid by|payer(?: name)?|from|भेजने वाला|भुगतानकर्ता|प्रेषक)\s*[:\-]?\s*(.*)$/i.exec(lines[i]);
     if (!payer) continue;
-    const value = payer[1] || lines[i + 1] || '';
+    const value = clean(payer[1] || lines[i + 1]);
     if (/\p{L}/u.test(value) && !/^(?:bank|account|a\/c|upi|utr|date|amount|to)\b/i.test(value)
       && !/[@₹]|\d{5}/.test(value)) fields.payer = value.slice(0, 160);
     break;
@@ -59,7 +66,7 @@ export function parsePaymentText(text = '') {
     if (paid && !/^(?:amount|payment|you|money)\b/i.test(paid[1]) && !/[@\d₹]/.test(paid[1])) fields.payer = paid[1].trim();
   }
   const nameValue = (value) => {
-    const name = String(value || '').trim();
+    const name = clean(value);
     return /\p{L}/u.test(name) && !/[@\p{Sc}]|\d{3}/u.test(name)
       && !/^(?:bank|account|a\/c|upi|utr|date|amount|reference|paid|payment|powered|txn)\b/i.test(name) ? name.slice(0, 160) : null;
   };
@@ -69,6 +76,10 @@ export function parsePaymentText(text = '') {
       const name = nameValue(receiver[1] || lines[i + 1]);
       if (name) { fields.receiver = name; break; }
     }
+  }
+  if (!fields.receiver) {
+    const banking = /^banking name\s*[:\-]?\s*(.+)$/im.exec(source);
+    if (banking && nameValue(banking[1])) fields.receiver = nameValue(banking[1]);
   }
   if (!fields.receiver && fields.payer) {
     for (let i = 0; i < lines.length; i += 1) {

@@ -75,6 +75,22 @@ test('font choice persists across settings reads and invalid choices are ignored
   await call('PUT', '/api/settings', { appearance: { font: 'original' } });
 });
 
+test('Notion style and proof icon persist and invalid choices are ignored', async () => {
+  await call('PUT', '/api/settings', { appearance: { style: 'notion', proofIcon: 'seal' } });
+  const appearance = (await call('GET', '/api/settings')).body.appearance;
+  assert.equal(appearance.style, 'notion');
+  assert.equal(appearance.proofIcon, 'seal');
+  await call('PUT', '/api/settings', { appearance: { style: '__proto__', proofIcon: 'invalid' } });
+  assert.deepEqual((await call('GET', '/api/settings')).body.appearance, appearance);
+  const made = (await call('POST', '/api/confirmations', { amount: 25 })).body;
+  assert.equal(made.icon_style, 'seal');
+  const pub = (await call('GET', `/api/public/c/${made.token}`, null, { auth: false })).body;
+  assert.equal(pub.settings.appearance.style, 'notion');
+  assert.equal(pub.confirmation.icon_style, 'seal');
+  await call('DELETE', `/api/confirmations/${made.id}`);
+  await call('PUT', '/api/settings', { appearance: { style: 'billdot', proofIcon: 'arrow' } });
+});
+
 test('screenshot extraction rejects bad images and never creates a proof', async () => {
   const before = (await call('GET', '/api/confirmations')).body.length;
   assert.equal((await call('POST', '/api/confirmations/extract', { image: 'data:image/png;base64,AAAA' })).status, 400);
@@ -186,11 +202,13 @@ test('payment confirmation records the payment and has a public page', async () 
   assert.equal(bad.status, 400);
 
   const made = await call('POST', '/api/confirmations', {
-    document_id: doc.id, amount: 2000, receiver: 'Receiver Studio', reference: 'UTR998877', record_payment: true, image: png, show_image: false,
+    document_id: doc.id, direction: 'received', amount: 2000, receiver: 'Receiver Studio', reference: 'UTR998877', record_payment: true, image: png, show_image: false,
   });
   assert.equal(made.status, 201);
   assert.equal(made.body.payer, 'Proof Co');
   assert.ok(made.body.payment_id);
+  assert.equal(made.body.direction, 'received');
+  assert.equal((await call('PUT', `/api/confirmations/${made.body.id}`, { direction: 'sent' })).status, 409);
   const after = (await call('GET', `/api/documents/${doc.id}`)).body;
   assert.equal(after.status, 'paid');
 
@@ -224,6 +242,35 @@ test('payment confirmation records the payment and has a public page', async () 
 
   assert.equal((await call('DELETE', `/api/confirmations/${made.body.id}`)).status, 200);
   assert.equal((await call('GET', `/api/public/c/${token}`, null, { auth: false })).status, 404);
+});
+
+test('new proofs default to sent with correct parties and never reduce a bill balance', async () => {
+  const doc = (await call('POST', '/api/documents', {
+    type: 'invoice', client: { name: 'Recipient Co' }, items: [{ name: 'Work', qty: 1, rate: 1000, tax_rate: 0 }],
+  })).body;
+  const made = await call('POST', '/api/confirmations', { document_id: doc.id, amount: 100, icon_style: 'check' });
+  assert.equal(made.status, 201);
+  assert.equal(made.body.direction, 'sent');
+  assert.equal(made.body.payer, 'Test Studio');
+  assert.equal(made.body.receiver, 'Recipient Co');
+  assert.equal(made.body.icon_style, 'check');
+  assert.equal(made.body.payment_id, null);
+  const uploads = fs.readdirSync(path.join(dataDir, 'uploads')).length;
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const refused = await call('POST', '/api/confirmations', { document_id: doc.id, amount: 100, record_payment: true, image: png });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /Sent payments/);
+  assert.equal(fs.readdirSync(path.join(dataDir, 'uploads')).length, uploads);
+  assert.equal((await call('GET', `/api/documents/${doc.id}`)).body.balance, 1000);
+  const updated = await call('PUT', `/api/confirmations/${made.body.id}`, { direction: 'received', icon_style: 'dots' });
+  assert.equal(updated.body.payer, 'Test Studio', 'changing presentation does not swap actual parties');
+  assert.equal(updated.body.receiver, 'Recipient Co');
+  assert.equal(updated.body.icon_style, 'dots');
+  assert.equal(updated.body.direction, 'received');
+  const pub = (await call('GET', `/api/public/c/${made.body.token}`, null, { auth: false })).body.confirmation;
+  assert.equal(pub.direction, 'received');
+  assert.equal(pub.icon_style, 'dots');
+  await call('DELETE', `/api/confirmations/${made.body.id}`);
 });
 
 test('unknown public token is a 404', async () => {
@@ -384,7 +431,7 @@ test('a refused payment proof leaves no screenshot behind', async () => {
   const uploads = path.join(dataDir, 'uploads');
   const before = fs.readdirSync(uploads).length;
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-  const res = await call('POST', '/api/confirmations', { document_id: quote.id, amount: 100, record_payment: true, image: png });
+  const res = await call('POST', '/api/confirmations', { document_id: quote.id, direction: 'received', amount: 100, record_payment: true, image: png });
   assert.equal(res.status, 400);
   assert.equal(fs.readdirSync(uploads).length, before);
   assert.equal((await call('GET', `/api/confirmations?document=${quote.id}`)).body.length, 0);

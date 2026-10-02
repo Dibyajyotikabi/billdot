@@ -1,4 +1,4 @@
-/* Payment received card. Always dark, like a phone screen, on any page theme. */
+/* Payment proof card. The Notion stylesheet supplies its minimal variant. */
 
 /* The wrapper is the size container, so the card's own padding scales with it too. */
 .proof-box { container-type: inline-size; width: 100%; }

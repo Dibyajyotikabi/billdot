@@ -17,16 +17,22 @@
   }
 }
 [data-style='notion'] .rail { background: var(--surface-2); }
+[data-style='notion'] .preview-frame, [data-style='notion'] .auth, [data-style='notion'] .pub { background-image: none; }
+[data-style='notion'] .settings-nav a.on { box-shadow: inset 2px 0 0 var(--ink); }
+[data-style='notion'] .totals-mini, [data-style='notion'] .logo-drop { border-style: solid; }
 [data-style='notion'] .label, [data-style='notion'] .section-title { letter-spacing: 0; text-transform: none; }
 [data-style='notion'] .brand-name { font-size: 22px; font-weight: 650; letter-spacing: -0.03em; }
 [data-style='notion'] .brand .led, [data-style='notion'] .section-title .idx { display: none; }
 [data-style='notion'] .btn { border-radius: 5px; }
+[data-style='notion'] .btn--red { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+[data-style='notion'] .btn--primary:hover, [data-style='notion'] .btn--red:hover { background: var(--ink-2); }
 [data-style='notion'] .page-title { font-weight: 650; line-height: 1.2; }
 [data-style='notion'] .hero-kpi { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
 [data-style='notion'] .hero-kpi::after { display: none; }
 [data-style='notion'] .hero-kpi .label { color: var(--muted); }
 [data-style='notion'] .hero-value, [data-style='notion'] .kpi-value, [data-style='notion'] .proof-tile-amt { font-weight: 600; letter-spacing: -0.04em; }
 [data-style='notion'] .proof-tile:hover { transform: none; background: var(--surface-2); }
+[data-style='notion'] .amount-big, [data-style='notion'] .pub-amount { font-weight: 600; letter-spacing: -0.04em; }
 [data-style='notion'] .proof {
   --p-bg: var(--surface); --p-ink: var(--ink); --p-muted: var(--muted); --p-line: var(--line); --p-green: var(--ink);
   border: 1px solid var(--line); box-shadow: none;
@@ -39,6 +45,8 @@
 [data-style='notion'] .proof-rows dd { font-weight: 500; }
 [data-style='notion'] .proof-thanks { font-size: 3cqw; font-weight: 500; }
 [data-style='notion'] .proof-check i.on { box-shadow: none; animation: none; }
+[data-style='notion'] .proof-check i:not(.on) { background: var(--p-line); }
+[data-style='notion'] .proof-amount, [data-style='notion'] .proof-payer { animation: none; }
 [data-style='notion'] .proof-attachment { background: var(--surface); border-color: var(--line); }
 [data-style='notion'] .proof-attachment figcaption { color: var(--ink); }
 [data-style='notion'] .proof-attachment figcaption small { color: var(--muted); }
@@ -51,3 +59,6 @@
 [data-style='notion'] .nd-led { display: none; }
 [data-style='notion'] .nd-meta { border-bottom-style: solid; border-color: var(--nd-faint); }
 [data-style='notion'] .nd-grand dd { font-weight: 600; }
+[data-style='notion'] .nd-items th { letter-spacing: 0; text-transform: none; border-color: var(--nd-faint); }
+[data-style='notion'] .nd-grand { border-color: var(--nd-faint); }
+[data-style='notion'] .nd-pay { border-style: solid; border-color: var(--nd-faint); border-radius: 1mm; }

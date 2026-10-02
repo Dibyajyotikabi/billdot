@@ -262,7 +262,7 @@ export async function drawProofCard({ confirmation: c, business = {}, locale = '
 
 export const proofFileName = (c) => {
   c = visibleProof(c);
-  return `payment-${String(c.reference || c.paid_on || 'received').replace(/[^\w-]+/g, '')}.png`;
+  return `payment-${String(c.reference || c.paid_on || proofDirection(c)).replace(/[^\w-]+/g, '')}.png`;
 };
 
 export async function downloadProofCard(input) {

@@ -46,7 +46,7 @@ function parseRoute() {
   if (a === 'clients') return { name: 'clients', params: { id: b ? Number(b) : null }, query };
   if (a === 'items') return { name: 'items', query };
   if (a === 'settings') return { name: 'settings', params: { tab: b || '' }, query };
-  if (a === 'payments') return { name: 'payments', params: { id: b === 'new' ? 'new' : (b ? Number(b) : null) }, query };
+  if (a === 'payments') return { name: 'payments', params: { id: ['new', 'bulk'].includes(b) ? b : (b ? Number(b) : null) }, query };
   return { name: 'dashboard', query };
 }
 

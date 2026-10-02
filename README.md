@@ -59,14 +59,16 @@ Add business creates a new one with its own details, logo, UPI ID, bank details 
 
 ## Payment proofs
 
-Payment proofs turn a payment into a "payment received" page you can send to the client.
+Payment proofs turn a payment into a page you can share. New proofs default to **Payment sent**, with the recipient shown as **to** and the sender as **from**. Choose **Payment received** for incoming payments.
 
 1. Open Payment proofs > New proof, or click Payment proof on an invoice.
 2. Add the UPI screenshot if you have one (drop it, paste it or pick it), then fill in the amount, date, method and UTR.
-3. Leave "Record this payment on the bill" ticked to add the payment to the invoice.
+3. Choose the payment direction and proof icon. Only incoming payments offer "Record this incoming payment on the bill"; tick it to reduce the invoice balance. Sent proofs do not change the bill's balance.
 4. Create the page. You get a `/p/...` link to share on WhatsApp, and Save image downloads a 1080px-wide PNG. The receipt is 1080x1350; an included screenshot extends it below the receipt.
 
-The app reads the screenshot on your computer and fills the details it can recognise, including separate sender and receiver names. Review the amount, date, names and UTR before creating the page; unclear or unfamiliar screenshots may need manual entry. Your edits are preserved while it reads.
+The app reads the screenshot on your computer and fills the details it can recognise, including separate sender and receiver names. Review the amount, date, names and UTR before creating the page; unclear or unfamiliar screenshots may need manual entry. Your edits are preserved while it reads. Dark-theme receipts (PhonePe, HDFC and similar) get a second, high-contrast reading when the first one misses something.
+
+To make many proofs at once, open Payment proofs > Bulk upload and drop up to 30 screenshots. Each one is read in turn and becomes its own proof. Review every row, untick any you don't want (repeated UTRs are unticked for you), then create them all in one click.
 
 Details to show lets you hide the sender, receiver, transaction ID, amount, date, method, linked bill or note. These choices apply to the preview, shared page and saved image, and can also be changed after creating a proof. The original screenshot still contains its own details.
 
@@ -74,7 +76,9 @@ The screenshot stays private until you tick "Include screenshot as payment proof
 
 ## Other settings
 
-Settings > Appearance changes the font throughout the app, documents, shared pages and saved payment images. Choose Billdot original, Space Grotesk, Space Mono, System sans, Arial or Classic serif. Fonts work offline.
+Settings > Appearance offers **Billdot** and **Notion — minimal** styles throughout the app, bills, printed documents, shared pages and saved payment images. Notion uses flat surfaces, fine lines and quiet typography. Choose a default proof icon (direction arrow, simple check, circle check or dot matrix), or change it on an individual proof.
+
+Appearance also changes the font throughout the app, documents, shared pages and saved payment images. Choose Billdot original, Space Grotesk, Space Mono, System sans, Arial or Classic serif. Notion uses system typography when the original font is selected. Fonts work offline.
 
 - `PORT` changes the port (default 4321).
 - `DATA_DIR` changes where the database is stored (default `./data`).
