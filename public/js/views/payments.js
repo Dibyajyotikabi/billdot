@@ -49,8 +49,8 @@ function listMarkup(list) {
   return `<div class="proof-grid">${list.map((c) => `<a class="proof-tile" href="#/payments/${c.id}">
     <span class="row-between"><span class="label">${esc(date(c.paid_on))}</span>${c.has_image ? `<span class="muted" title="Has screenshot">${icons.image}</span>` : ''}</span>
     <span class="proof-tile-amt">${esc(money(c.amount, c.currency))}</span>
-    <span class="t">${esc(proofParties(c)[0][0])} ${esc(proofParties(c)[0][1] || 'Unknown party')}</span>
-    <span class="s">${esc(proofLabel(c))}</span>
+    <span class="t">${esc(c.payer || 'Unknown sender')}</span>
+    <span class="s">to ${esc(c.receiver || 'unknown receiver')} · ${esc(proofLabel(c))}</span>
     <span class="s">${esc(c.method)}${c.reference ? ` · ${esc(c.reference)}` : ''}</span>
     <span class="s">${c.document_number ? `<span class="mono">${esc(c.document_number)}</span>` : 'Not linked to a bill'}${hasManyBusinesses() && businessOf(c.business_id) ? ` · ${esc(businessOf(c.business_id).code)}` : ''}</span>
   </a>`).join('')}</div>`;

@@ -57,7 +57,8 @@ app.get('/d/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'doc.html'
 app.get('/p/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'paid.html')));
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, file) {
-    if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    // Revalidate app files on every load so a deploy shows up at once, even behind Cloudflare.
+    if (/\.(?:html|js|css|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
   },
 }));
 
