@@ -7,8 +7,9 @@ import { apiRouter } from './routes/api.js';
 import { documentsRouter } from './routes/documents.js';
 import { publicRouter } from './routes/public.js';
 import { confirmationsRouter } from './routes/confirmations.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, behindProxy } from './auth.js';
 import { startScheduler } from './scheduler.js';
+import { startBackups } from './backup.js';
 import { startTunnel } from './tunnel.js';
 import { saveSettings } from './settings.js';
 import { PORT } from './sender.js';
@@ -17,7 +18,7 @@ const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const app = express();
 
 app.disable('x-powered-by');
-app.set('trust proxy', 'loopback');
+app.set('trust proxy', behindProxy ? 1 : 'loopback');
 
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
@@ -32,6 +33,7 @@ app.use((req, res, next) => {
     "form-action 'self'",
     "object-src 'none'",
   ].join('; '));
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -50,6 +52,7 @@ app.use('/api/confirmations', confirmationsRouter);
 app.use('/api', requireAuth, apiRouter);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
+app.get('/healthz', (req, res) => res.type('text').send('ok'));
 app.get('/d/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'doc.html')));
 app.get('/p/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'paid.html')));
 app.use(express.static(PUBLIC_DIR, {
@@ -78,6 +81,7 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`  This computer   http://localhost:${PORT}`);
   for (const url of lanAddresses()) console.log(`  Same Wi-Fi      ${url}`);
   startScheduler();
+  startBackups();
   if (process.argv.includes('--share')) {
     console.log('\n  Opening a public link...');
     const status = await startTunnel(PORT);

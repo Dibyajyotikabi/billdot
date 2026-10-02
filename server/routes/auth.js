@@ -7,7 +7,9 @@ import { saveSettings } from '../settings.js';
 import { HttpError, v } from '../util.js';
 
 export const authRouter = Router();
-const limiter = rateLimit({ limit: 10, windowMs: 15 * 60 * 1000 });
+const perClient = rateLimit({ limit: 10, windowMs: 15 * 60 * 1000 });
+const overall = rateLimit({ limit: 60, windowMs: 15 * 60 * 1000, key: 'all' });
+const limiter = (req, res, next) => overall(req, res, (err) => (err ? next(err) : perClient(req, res, next)));
 
 authRouter.get('/status', (req, res) => {
   res.json({ setup: isSetup(), authed: hasSession(req), local: isLocalRequest(req) });

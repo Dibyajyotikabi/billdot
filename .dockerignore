@@ -1,0 +1,8 @@
+node_modules
+data
+.git
+docs
+assets
+test
+.DS_Store
+.playwright-mcp

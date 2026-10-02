@@ -88,15 +88,22 @@ export function isLocalRequest(req) {
 
 // Only cloudflared, which connects from loopback, may name the real client.
 // A device on the Wi-Fi could fake the header to dodge the rate limit.
+// On a server behind Cloudflare and a reverse proxy (TRUST_PROXY=1), the proxy names the client.
+export const behindProxy = process.env.TRUST_PROXY === '1';
+
 export function clientIp(req) {
   const addr = req.socket.remoteAddress || 'unknown';
-  return (isLoopback(req) && req.headers['cf-connecting-ip']) || addr;
+  const named = req.headers['cf-connecting-ip'];
+  if (named && (isLoopback(req) || behindProxy)) return String(named);
+  return behindProxy ? req.ip || addr : addr;
 }
 
-export function rateLimit({ limit, windowMs }) {
+// With key set, every client shares one bucket. That caps guessing even if a
+// client dodges the per-IP limit by faking a header.
+export function rateLimit({ limit, windowMs, key: fixedKey }) {
   const hits = new Map();
   return (req, res, next) => {
-    const key = clientIp(req);
+    const key = fixedKey || clientIp(req);
     const now = Date.now();
     const entry = hits.get(key);
     if (!entry || entry.reset < now) {

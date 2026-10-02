@@ -1,0 +1,13 @@
+services:
+  billdot:
+    build: .
+    restart: unless-stopped
+    environment:
+      - PUBLIC_URL=${PUBLIC_URL:-}
+      - TZ=Asia/Kolkata
+    volumes:
+      - billdot-data:/data
+    mem_limit: 700m
+
+volumes:
+  billdot-data:
