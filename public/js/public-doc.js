@@ -3,6 +3,7 @@ import { icons } from './icons.js';
 import { $, esc, store, money, date, statusPill, toast, toastError, modal, fitSheet, printSheet } from './ui.js';
 import { DOC_TYPES, PAYMENT_METHODS } from './shared/doc-types.js';
 import { renderDocument } from './shared/render-doc.js';
+import { applyAppearance } from './shared/appearance.js';
 
 const root = $('#pub');
 const token = location.pathname.split('/').filter(Boolean).pop();
@@ -114,6 +115,7 @@ async function respond(action) {
 async function load() {
   const data = await get(api);
   store.settings = data.settings;
+  applyAppearance(data.settings);
   paint(data);
   return data;
 }

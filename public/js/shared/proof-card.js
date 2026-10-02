@@ -1,6 +1,8 @@
-// Draws the "payment received" post as a 1080x1350 PNG (Instagram portrait size)
+// Draws a 1080x1350 receipt, extending it with the selected payment screenshot,
 // so it can be downloaded or shared straight to WhatsApp.
 import { formatMoney, formatDate } from './format.js';
+import { visibleProof, proofLabel, proofParties, proofDirection, proofIconStyle } from './proof-details.js';
+import { fontTheme } from './appearance.js';
 
 const W = 1080;
 const H = 1350;
@@ -20,23 +22,29 @@ export const CHECK = [
   '001100000',
 ];
 
-async function loadFonts() {
+async function loadFonts(fonts) {
   if (!document.fonts?.load) return;
   await Promise.all([
-    document.fonts.load('900 120px Doto'),
-    document.fonts.load('400 28px "Space Mono"'),
-    document.fonts.load('700 28px "Space Mono"'),
-    document.fonts.load('500 40px "Space Grotesk"'),
-    document.fonts.load('600 40px "Space Grotesk"'),
+    document.fonts.load(`900 120px ${fonts.display}`),
+    document.fonts.load(`400 28px ${fonts.detail}`),
+    document.fonts.load(`700 28px ${fonts.detail}`),
+    document.fonts.load(`500 40px ${fonts.body}`),
+    document.fonts.load(`600 40px ${fonts.body}`),
   ]).catch(() => {});
 }
 
-function loadImage(src) {
-  return new Promise((resolve) => {
+function loadImage(src, required = false) {
+  return new Promise((resolve, reject) => {
     if (!src) { resolve(null); return; }
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    const failed = () => {
+      clearTimeout(timer);
+      if (required) reject(new Error('Could not load the attached screenshot. Try saving the image again.'));
+      else resolve(null);
+    };
+    const timer = setTimeout(failed, 10_000);
+    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = failed;
     img.src = src;
   });
 }
@@ -59,9 +67,9 @@ function clip(ctx, text, maxWidth) {
   return `${out.trimEnd()}...`;
 }
 
-function dotGrid(ctx) {
+function dotGrid(ctx, height = H) {
   ctx.fillStyle = C.dot;
-  for (let y = 18; y < H; y += 27) {
+  for (let y = 18; y < height; y += 27) {
     for (let x = 18; x < W; x += 27) {
       ctx.beginPath();
       ctx.arc(x, y, 1.6, 0, Math.PI * 2);
@@ -81,13 +89,13 @@ function led(ctx, x, y, r, color) {
   ctx.restore();
 }
 
-function drawCheck(ctx, x, y, cell) {
+function drawCheck(ctx, x, y, cell, colors = C, minimal = false) {
   CHECK.forEach((row, r) => [...row].forEach((on, c) => {
     const cx = x + c * cell + cell / 2;
     const cy = y + r * cell + cell / 2;
-    if (on === '1') led(ctx, cx, cy, cell * 0.36, C.green);
+    if (on === '1' && !minimal) led(ctx, cx, cy, cell * 0.36, colors.green);
     else {
-      ctx.fillStyle = '#1a1a1a';
+      ctx.fillStyle = on === '1' ? colors.green : colors.dot;
       ctx.beginPath();
       ctx.arc(cx, cy, cell * 0.2, 0, Math.PI * 2);
       ctx.fill();
@@ -95,26 +103,55 @@ function drawCheck(ctx, x, y, cell) {
   }));
 }
 
-function dottedRule(ctx, y) {
-  ctx.fillStyle = C.line;
+function dottedRule(ctx, y, colors = C, minimal = false) {
+  ctx.fillStyle = colors.line;
+  if (minimal) { ctx.fillRect(PAD, y, W - PAD * 2, 1); return; }
   for (let x = PAD; x < W - PAD; x += 12) ctx.fillRect(x, y, 5, 2);
+}
+
+function drawProofIcon(ctx, c, y, colors, minimal) {
+  const style = proofIconStyle(c.icon_style);
+  if (style === 'dots') { drawCheck(ctx, PAD - 4, y, 24, colors, minimal); return; }
+  ctx.save();
+  ctx.translate(PAD, y);
+  ctx.scale(7, 7);
+  ctx.strokeStyle = colors.green;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (style === 'seal') { ctx.beginPath(); ctx.arc(12, 12, 10, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.beginPath();
+  if (style === 'arrow' && proofDirection(c) === 'sent') {
+    ctx.moveTo(7, 17); ctx.lineTo(17, 7); ctx.moveTo(7, 7); ctx.lineTo(17, 7); ctx.lineTo(17, 17);
+  } else if (style === 'arrow') {
+    ctx.moveTo(17, 7); ctx.lineTo(7, 17); ctx.moveTo(7, 7); ctx.lineTo(7, 17); ctx.lineTo(17, 17);
+  } else { ctx.moveTo(6, 12); ctx.lineTo(10, 16); ctx.lineTo(18, 8); }
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
  * @param {{confirmation: object, business: object, locale?: string}} input
  * @returns {Promise<Blob>}
  */
-export async function drawProofCard({ confirmation: c, business = {}, locale = 'en-IN' }) {
-  await loadFonts();
+export async function drawProofCard({ confirmation: c, business = {}, locale = 'en-IN', font = 'original', style = 'billdot' }) {
+  c = visibleProof(c);
+  const minimal = style === 'notion';
+  const colors = minimal ? { ...C, bg: '#fff', ink: '#37352f', muted: '#787774', line: '#e9e9e7', dot: '#e9e9e7', green: '#37352f' } : C;
+  const fonts = fontTheme(minimal && font === 'original' ? 'system' : font);
+  await loadFonts(fonts);
+  const screenshot = await loadImage(c.image_src, true);
+  const receiptHeight = H + (c.note ? 140 : 0);
+  const shotHeight = screenshot ? Math.min(2400, Math.round((W - PAD * 2) * screenshot.height / screenshot.width)) : 0;
   const canvas = document.createElement('canvas');
   canvas.width = W;
-  canvas.height = H;
+  canvas.height = receiptHeight + (screenshot ? shotHeight + 190 : 0);
   const ctx = canvas.getContext('2d');
   ctx.textBaseline = 'alphabetic';
 
-  ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, W, H);
-  dotGrid(ctx);
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(0, 0, W, canvas.height);
+  if (!minimal) dotGrid(ctx, receiptHeight);
 
   // Header: logo or LED, business name, small red dot like a recording light.
   const logo = await loadImage(business.logo);
@@ -131,74 +168,102 @@ export async function drawProofCard({ confirmation: c, business = {}, locale = '
     ctx.drawImage(logo, PAD, 96, w, h);
     nameX = PAD + w + 34;
   }
-  ctx.fillStyle = C.ink;
-  ctx.font = '600 38px "Space Grotesk", sans-serif';
+  ctx.fillStyle = colors.ink;
+  ctx.font = `600 38px ${fonts.body}`;
   ctx.fillText(clip(ctx, business.name || 'Payment', W - nameX - PAD - 40), nameX, 137);
-  led(ctx, W - PAD - 8, 124, 9, C.red);
+  if (!minimal) led(ctx, W - PAD - 8, 124, 9, colors.red);
 
   // Label
-  led(ctx, PAD + 10, 300, 10, C.green);
-  ctx.fillStyle = C.green;
-  ctx.font = '700 30px "Space Mono", monospace';
-  ctx.letterSpacing = '6px';
-  ctx.fillText('PAYMENT RECEIVED', PAD + 40, 311);
+  if (!minimal) led(ctx, PAD + 10, 300, 10, colors.green);
+  ctx.fillStyle = colors.green;
+  ctx.font = `700 30px ${fonts.detail}`;
+  ctx.letterSpacing = minimal ? '0px' : '6px';
+  ctx.fillText(minimal ? proofLabel(c) : proofLabel(c).toUpperCase(), minimal ? PAD : PAD + 40, 311);
   ctx.letterSpacing = '0px';
 
   // Amount in dot-matrix type
   const amount = formatMoney(c.amount, c.currency, locale);
-  const size = fitText(ctx, amount, (s) => `900 ${s}px Doto, monospace`, 190, W - PAD * 2);
-  ctx.fillStyle = C.ink;
-  ctx.fillText(amount, PAD - 6, 330 + size * 0.95);
+  const size = fitText(ctx, amount, (s) => `${minimal ? 600 : 900} ${s}px ${fonts.display}`, minimal ? 120 : 190, W - PAD * 2);
+  ctx.fillStyle = colors.ink;
+  if (c.amount !== undefined) ctx.fillText(amount, PAD - 6, 330 + size * 0.95);
   let y = 330 + size * 0.95 + 74;
 
-  if (c.payer) {
-    ctx.fillStyle = C.muted;
-    ctx.font = '500 40px "Space Grotesk", sans-serif';
-    ctx.fillText(clip(ctx, `from ${c.payer}`, W - PAD * 2), PAD, y);
-    y += 40;
+  for (const [prefix, name] of proofParties(c).filter(([, name]) => name)) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = `500 40px ${fonts.body}`;
+    ctx.fillText(clip(ctx, `${prefix} ${name}`, W - PAD * 2), PAD, y);
+    y += 48;
   }
 
   // Detail rows
   y = Math.max(y + 50, 760);
-  dottedRule(ctx, y);
+  dottedRule(ctx, y, colors, minimal);
   const rows = [
-    ['DATE', formatDate(c.paid_on, locale)],
-    ['METHOD', c.method],
+    c.paid_on && ['DATE', formatDate(c.paid_on, locale)],
+    c.method && ['METHOD', c.method],
     c.reference && ['UTR / REF', c.reference],
     c.document?.number && ['FOR', c.document.number],
   ].filter(Boolean);
   for (const [label, value] of rows) {
     y += 74;
-    ctx.fillStyle = C.muted;
-    ctx.font = '400 26px "Space Mono", monospace';
-    ctx.letterSpacing = '3px';
-    ctx.fillText(label, PAD, y);
+    ctx.fillStyle = colors.muted;
+    ctx.font = `400 26px ${fonts.detail}`;
+    ctx.letterSpacing = minimal ? '0px' : '3px';
+    ctx.fillText(minimal ? label.charAt(0) + label.slice(1).toLowerCase() : label, PAD, y);
     ctx.letterSpacing = '0px';
-    ctx.fillStyle = C.ink;
-    ctx.font = '700 32px "Space Mono", monospace';
+    ctx.fillStyle = colors.ink;
+    ctx.font = `700 32px ${fonts.detail}`;
     ctx.textAlign = 'right';
     ctx.fillText(clip(ctx, String(value), W - PAD * 2 - 260), W - PAD, y);
     ctx.textAlign = 'left';
   }
-  dottedRule(ctx, y + 40);
+  dottedRule(ctx, y + 40, colors, minimal);
+  if (c.note) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = `400 26px ${fonts.body}`;
+    ctx.fillText(clip(ctx, c.note, W - PAD * 2), PAD, y + 86);
+  }
 
   // Footer: big dot check and thank you
-  drawCheck(ctx, PAD - 4, H - 250, 26);
-  ctx.fillStyle = C.ink;
-  ctx.font = '600 44px "Space Grotesk", sans-serif';
+  drawProofIcon(ctx, c, receiptHeight - 240, colors, minimal);
+  ctx.fillStyle = colors.ink;
+  ctx.font = `600 ${minimal ? 32 : 40}px ${fonts.body}`;
   ctx.textAlign = 'right';
-  ctx.fillText('Thank you', W - PAD, H - 140);
-  ctx.fillStyle = C.muted;
-  ctx.font = '400 24px "Space Mono", monospace';
-  ctx.fillText(clip(ctx, [business.website, business.phone].filter(Boolean).join('  ') || ' ', 620), W - PAD, H - 96);
+  ctx.fillText(proofDirection(c) === 'sent' ? 'Payment confirmation' : 'Thank you', W - PAD, receiptHeight - 140);
+  ctx.fillStyle = colors.muted;
+  ctx.font = `400 24px ${fonts.detail}`;
+  ctx.fillText(clip(ctx, [business.website, business.phone].filter(Boolean).join('  ') || ' ', 620), W - PAD, receiptHeight - 96);
   ctx.textAlign = 'left';
+
+  if (screenshot) {
+    dottedRule(ctx, receiptHeight - 12, colors, minimal);
+    ctx.fillStyle = colors.green;
+    ctx.font = `700 26px ${fonts.detail}`;
+    ctx.fillText('PAYMENT EVIDENCE', PAD, receiptHeight + 58);
+    const scale = Math.min((W - PAD * 2) / screenshot.width, shotHeight / screenshot.height);
+    const width = screenshot.width * scale;
+    const height = screenshot.height * scale;
+    const x = (W - width) / 2;
+    const y = receiptHeight + 100;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 16);
+    ctx.clip();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x, y, width, height);
+    ctx.drawImage(screenshot, x, y, width, height);
+    ctx.restore();
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not draw the image.'))), 'image/png');
   });
 }
 
-export const proofFileName = (c) => `payment-${String(c.reference || c.paid_on || 'received').replace(/[^\w-]+/g, '')}.png`;
+export const proofFileName = (c) => {
+  c = visibleProof(c);
+  return `payment-${String(c.reference || c.paid_on || 'received').replace(/[^\w-]+/g, '')}.png`;
+};
 
 export async function downloadProofCard(input) {
   const blob = await drawProofCard(input);
@@ -215,7 +280,7 @@ export async function shareProofCard(input, { text = '', url = '' } = {}) {
   const blob = await drawProofCard(input);
   const file = new File([blob], proofFileName(input.confirmation), { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], text, url }).catch(() => {});
+    await navigator.share({ files: [file], text, url });
     return 'shared';
   }
   await downloadProofCard(input);

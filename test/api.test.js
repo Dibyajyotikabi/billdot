@@ -52,6 +52,7 @@ after(() => {
 test('private API needs a session', async () => {
   const res = await call('GET', '/api/documents', null, { auth: false });
   assert.equal(res.status, 401);
+  assert.equal((await call('POST', '/api/confirmations/extract', {}, { auth: false })).status, 401);
 });
 
 test('setup signs in and short passwords are refused', async () => {
@@ -64,6 +65,21 @@ test('setup signs in and short passwords are refused', async () => {
 test('writes without the request header are rejected', async () => {
   const res = await call('POST', '/api/clients', { name: 'Nope' }, { header: false });
   assert.equal(res.status, 403);
+});
+
+test('font choice persists across settings reads and invalid choices are ignored', async () => {
+  assert.equal((await call('PUT', '/api/settings', { appearance: { font: 'serif' } })).status, 200);
+  assert.equal((await call('GET', '/api/settings')).body.appearance.font, 'serif');
+  await call('PUT', '/api/settings', { appearance: { font: '__proto__' } });
+  assert.equal((await call('GET', '/api/settings')).body.appearance.font, 'serif');
+  await call('PUT', '/api/settings', { appearance: { font: 'original' } });
+});
+
+test('screenshot extraction rejects bad images and never creates a proof', async () => {
+  const before = (await call('GET', '/api/confirmations')).body.length;
+  assert.equal((await call('POST', '/api/confirmations/extract', { image: 'data:image/png;base64,AAAA' })).status, 400);
+  assert.equal((await call('POST', '/api/confirmations/extract', { image: 'https://example.test/image.png' })).status, 400);
+  assert.equal((await call('GET', '/api/confirmations')).body.length, before);
 });
 
 test('invoice flow: create, share, claim, part pay, mark paid', async () => {
@@ -170,7 +186,7 @@ test('payment confirmation records the payment and has a public page', async () 
   assert.equal(bad.status, 400);
 
   const made = await call('POST', '/api/confirmations', {
-    document_id: doc.id, amount: 2000, reference: 'UTR998877', record_payment: true, image: png, show_image: false,
+    document_id: doc.id, amount: 2000, receiver: 'Receiver Studio', reference: 'UTR998877', record_payment: true, image: png, show_image: false,
   });
   assert.equal(made.status, 201);
   assert.equal(made.body.payer, 'Proof Co');
@@ -182,6 +198,7 @@ test('payment confirmation records the payment and has a public page', async () 
   const pub = await call('GET', `/api/public/c/${token}`, null, { auth: false });
   assert.equal(pub.status, 200);
   assert.equal(pub.body.confirmation.reference, 'UTR998877');
+  assert.equal(pub.body.confirmation.receiver, 'Receiver Studio');
   assert.equal(pub.body.confirmation.document.number, doc.number);
   assert.equal(pub.body.confirmation.has_image, false);
   assert.equal(pub.body.confirmation.id, undefined);
@@ -191,6 +208,19 @@ test('payment confirmation records the payment and has a public page', async () 
   const img = await fetch(`${BASE}/api/public/c/${token}/image`);
   assert.equal(img.status, 200);
   assert.equal(img.headers.get('content-type'), 'image/png');
+  assert.equal(img.headers.get('cache-control'), 'no-store');
+
+  const hiddenDetails = await call('PUT', `/api/confirmations/${made.body.id}`, { visibility: { payer: false, receiver: false, reference: false, amount: false, paid_on: false, method: false, document: false } });
+  assert.equal(hiddenDetails.body.show_image, true, 'detail changes preserve screenshot selection');
+  const hiddenPublic = (await call('GET', `/api/public/c/${token}`, null, { auth: false })).body.confirmation;
+  for (const key of ['payer', 'receiver', 'reference', 'amount', 'paid_on', 'method', 'document']) assert.equal(hiddenPublic[key], undefined);
+  assert.equal((await call('GET', `/api/confirmations/${made.body.id}`)).body.reference, 'UTR998877', 'hidden values stay available to the owner');
+  await call('PUT', `/api/confirmations/${made.body.id}`, { visibility: { reference: true } });
+  assert.equal((await call('GET', `/api/public/c/${token}`, null, { auth: false })).body.confirmation.reference, 'UTR998877');
+
+  await call('PUT', `/api/confirmations/${made.body.id}`, { show_image: false });
+  assert.equal((await call('GET', `/api/public/c/${token}`, null, { auth: false })).body.confirmation.has_image, false);
+  assert.equal((await call('GET', `/api/public/c/${token}/image`, null, { auth: false })).status, 404);
 
   assert.equal((await call('DELETE', `/api/confirmations/${made.body.id}`)).status, 200);
   assert.equal((await call('GET', `/api/public/c/${token}`, null, { auth: false })).status, 404);

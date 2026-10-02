@@ -1,8 +1,11 @@
 import { db, kvGet, kvSet } from './db.js';
 import { HttpError, nowIso, parseJson } from './util.js';
 import { DOC_TYPES, FORMATS } from '../public/js/shared/doc-types.js';
+import { FONT_OPTIONS, STYLE_OPTIONS } from '../public/js/shared/appearance.js';
+import { PROOF_ICONS } from '../public/js/shared/proof-details.js';
 
 export const DEFAULT_SETTINGS = {
+  appearance: { font: 'original', style: 'billdot', proofIcon: 'arrow' },
   business: {
     name: '', tagline: '', email: '', phone: '', website: '', address: '', taxId: '', logo: '', signatory: '',
   },
@@ -134,6 +137,9 @@ export function sanitize(defaults, patch) {
 
 export function saveSettings(patch, businessId = null) {
   const clean = sanitize(DEFAULT_SETTINGS, patch);
+  if (clean.appearance && !Object.hasOwn(FONT_OPTIONS, clean.appearance.font)) delete clean.appearance.font;
+  if (clean.appearance && !Object.hasOwn(STYLE_OPTIONS, clean.appearance.style)) delete clean.appearance.style;
+  if (clean.appearance && !Object.hasOwn(PROOF_ICONS, clean.appearance.proofIcon)) delete clean.appearance.proofIcon;
   if (clean.email && !clean.email.pass) delete clean.email.pass;
   if (clean.documents && !FORMATS[clean.documents.defaultFormat]) delete clean.documents.defaultFormat;
   if (clean.numbering) {
@@ -160,7 +166,7 @@ export function publicSettings(settings = getSettings()) {
 
 // Fields safe to show on a client-facing page.
 export function clientFacingSettings(settings = getSettings()) {
-  return { business: settings.business, payment: settings.payment, documents: settings.documents };
+  return { business: settings.business, payment: settings.payment, documents: settings.documents, appearance: settings.appearance };
 }
 
 export const emailConfigured = (settings = getSettings()) =>

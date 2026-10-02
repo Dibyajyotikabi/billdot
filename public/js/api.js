@@ -8,7 +8,7 @@ export class ApiError extends Error {
 let onUnauthorized = () => {};
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn; };
 
-export async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body, signal } = {}) {
   let res;
   try {
     res = await fetch(`/api${path}`, {
@@ -19,8 +19,10 @@ export async function api(path, { method = 'GET', body } = {}) {
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       credentials: 'same-origin',
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (err.name === 'AbortError') throw new ApiError(408, 'The request took too long. Try again.');
     throw new ApiError(0, 'Cannot reach the app. Is the server still running?');
   }
   const data = await res.json().catch(() => ({}));

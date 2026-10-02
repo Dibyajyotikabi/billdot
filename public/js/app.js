@@ -2,6 +2,9 @@ import { get, post, setUnauthorizedHandler } from './api.js';
 import { icons } from './icons.js';
 import { $, $$, esc, store, toast, toastError, bindMenus } from './ui.js';
 import { DOC_TYPES } from './shared/doc-types.js';
+import { applyAppearance } from './shared/appearance.js';
+
+try { applyAppearance({ appearance: { font: localStorage.getItem('bd-font') || 'original', style: localStorage.getItem('bd-style') || 'billdot' } }); } catch { /* Storage may be blocked. */ }
 
 const app = $('#app');
 
@@ -76,6 +79,7 @@ async function route() {
 
 export async function refreshSettings() {
   store.settings = await get('/settings');
+  applyAppearance(store.settings);
   updateSharePill();
   return store.settings;
 }

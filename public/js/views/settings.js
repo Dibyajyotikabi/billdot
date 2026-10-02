@@ -4,10 +4,12 @@ import {
   $, esc, store, debounce, toast, toastError, copyText, modal, confirmDialog, money, date, settingsFor, businessOf, hasManyBusinesses,
 } from '../ui.js';
 import { DOC_TYPES, FORMATS } from '../shared/doc-types.js';
+import { FONT_OPTIONS, STYLE_OPTIONS, fontTheme, applyAppearance } from '../shared/appearance.js';
+import { PROOF_ICONS } from '../shared/proof-details.js';
 
 const TABS = [
   ['businesses', 'Businesses'], ['business', 'Business details'], ['payments', 'Payments'], ['documents', 'Documents'], ['numbering', 'Numbering'],
-  ['email', 'Email'], ['automation', 'Automation'], ['sharing', 'Public link'], ['account', 'Account'], ['data', 'Backup'],
+  ['appearance', 'Appearance'], ['email', 'Email'], ['automation', 'Automation'], ['sharing', 'Public link'], ['account', 'Account'], ['data', 'Backup'],
 ];
 
 const pathGet = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
@@ -76,6 +78,18 @@ function businessesTab() {
 
 const tabs = {
   businesses: businessesTab,
+  appearance: () => section('Style', `
+    <label class="field"><span>Site and bill style</span><select class="select" data-k="appearance.style">
+      ${Object.entries(STYLE_OPTIONS).map(([id, label]) => `<option value="${id}" ${current().appearance?.style === id ? 'selected' : ''}>${esc(label)}</option>`).join('')}
+    </select><small>Notion uses a quiet monochrome layout, flat surfaces and minimal bills and payment proofs.</small></label>
+    <label class="field"><span>Default payment proof icon</span><select class="select" data-k="appearance.proofIcon">
+      ${Object.entries(PROOF_ICONS).map(([id, label]) => `<option value="${id}" ${current().appearance?.proofIcon === id ? 'selected' : ''}>${esc(label)}</option>`).join('')}
+    </select><small>You can choose a different icon for each proof.</small></label>
+    `) + section('Typography', `
+    <label class="field"><span>Font throughout the app</span><select class="select" data-k="appearance.font">
+      ${Object.entries(FONT_OPTIONS).map(([id, f]) => `<option value="${id}" ${current().appearance?.font === id ? 'selected' : ''}>${esc(f.label)}</option>`).join('')}
+    </select><small>Applies to all businesses, documents, shared pages and saved payment images. Fonts work offline.</small></label>
+    <div class="font-samples">${Object.entries(FONT_OPTIONS).map(([id, f]) => `<div style="font-family:${esc(fontTheme(id).display)}"><strong>${esc(f.label)}</strong><span>Billdot · ₹3,500.00 · Payment received</span></div>`).join('')}</div>`),
   business: () => businessSwitcher() + section(hasManyBusinesses() ? `${businessOf(editingId())?.code} details` : 'Your business', `
     <div class="logo-drop">
       ${current().business.logo ? `<img src="${esc(current().business.logo)}" alt="Logo">` : '<span class="muted">No logo</span>'}
@@ -250,6 +264,7 @@ export async function mount(el, { params, refreshSettings }) {
       await refreshSettings();
       saveState('', 'Saved');
     } catch (err) {
+      if (patch.appearance) applyAppearance(store.settings);
       saveState('err', 'Not saved');
       toastError(err);
     }
@@ -279,6 +294,9 @@ export async function mount(el, { params, refreshSettings }) {
     const field = e.target.closest('[data-k]');
     if (!field) return;
     if (field.dataset.k === 'email.pass' && !field.value) return;
+    if (['appearance.font', 'appearance.style'].includes(field.dataset.k)) {
+      applyAppearance({ appearance: { ...current().appearance, ...pending.appearance, [field.dataset.k.split('.')[1]]: field.value } });
+    }
     pending = mergeDeep(pending, patchFor(field.dataset.k, valueOf(field)));
     saveState('dirty', 'Saving');
     const row = field.closest('[data-num]');

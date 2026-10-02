@@ -1,6 +1,6 @@
 // Payment proofs: turn a UPI screenshot or typed details into a shareable
 // "payment received" page and image, optionally recording it on an invoice.
-import { get, post, put, del } from '../api.js';
+import { api, get, post, put, del } from '../api.js';
 import { icons } from '../icons.js';
 import {
   $, $$, esc, money, date, store, toast, toastError, confirmDialog, copyText, emptyState,
@@ -10,6 +10,7 @@ import { DOC_TYPES, PAYMENT_METHODS } from '../shared/doc-types.js';
 import { localToday } from '../shared/format.js';
 import { proofCardHtml } from '../shared/proof-html.js';
 import { downloadProofCard } from '../shared/proof-card.js';
+import { PROOF_FIELDS, proofVisibility, visibleProof } from '../shared/proof-details.js';
 
 const MAX_SIDE = 1600;
 const JPEG_QUALITY = 0.85;
@@ -18,19 +19,23 @@ const JPEG_QUALITY = 0.85;
 function readScreenshot(file) {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) { reject(new Error('Pick an image file, like a PNG or JPG screenshot.')); return; }
+    if (file.size > 20 * 1024 * 1024) { reject(new Error('Pick a screenshot smaller than 20 MB.')); return; }
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+      try {
+        if (img.width * img.height > 16_000_000) throw new Error('Use a screenshot smaller than 16 megapixels.');
+        const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+      } catch { reject(new Error('That image could not be prepared. Use a smaller PNG or JPG screenshot.')); }
+      finally { URL.revokeObjectURL(url); }
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That image could not be read.')); };
     img.src = url;
@@ -39,8 +44,16 @@ function readScreenshot(file) {
 
 const cardFor = (c) => {
   const s = settingsFor(c.business_id);
-  return { confirmation: { ...c, document: c.document_number ? { number: c.document_number } : c.document }, business: s.business, locale: s.documents.locale };
+  return { confirmation: { ...c, image_src: c.show_image && c.has_image ? `/api/confirmations/${c.id}/image` : null,
+    document: c.document_number ? { number: c.document_number } : c.document }, business: s.business,
+    locale: s.documents.locale, font: s.appearance?.font };
 };
+
+function visibilityControls(visibility, existing = false) {
+  const v = proofVisibility(visibility);
+  return `<div class="proof-controls">${Object.entries(PROOF_FIELDS).map(([key, label]) =>
+    `<label class="check"><input type="checkbox" ${existing ? 'data-act="visibility"' : ''} data-proof-field="${key}" ${v[key] ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}</div>`;
+}
 
 /* ---------- list ---------- */
 function listMarkup(list) {
@@ -75,11 +88,13 @@ function newForm(state, bills) {
   </select></label>` : '';
   return `
   <section class="section"><h2 class="section-title"><span class="idx">01</span>Screenshot</h2>
-    <label class="shot-drop" data-drop>
+    <label class="shot-drop" data-drop tabindex="0" role="button" aria-label="Upload payment screenshot">
       <input type="file" accept="image/*" name="shot" hidden>
-      <span data-shot-view>${icons.image}<span><b>Add the payment screenshot</b><br><small class="muted">Optional. Drop it here, paste it, or tap to pick. GPay, PhonePe, Paytm or a bank app all work.</small></span></span>
+      <span data-shot-view>${icons.image}<span><b>Add the payment screenshot</b><br><small class="muted">Drop, paste, or pick an image. We’ll read the payment details for you.</small></span></span>
     </label>
-    <label class="check" style="margin-top:12px"><input type="checkbox" name="show_image"><span>Show the screenshot on the page<br><small class="muted">Off by default. It can show account details, so check it first.</small></span></label>
+    <p class="shot-status" data-shot-status role="status" aria-live="polite">Details are read on this computer. Check them before creating the proof.</p>
+    <button class="btn btn--sm" type="button" data-shot-retry hidden>Read screenshot again</button>
+    <label class="check" style="margin-top:12px"><input type="checkbox" name="show_image" disabled><span>Include screenshot as payment proof<br><small class="muted">Adds it to the shared page and saved image. Check for private account details first.</small></span></label>
   </section>
   <section class="section"><h2 class="section-title"><span class="idx">02</span>Payment</h2>
     <div class="stack" style="gap:12px">
@@ -92,7 +107,10 @@ function newForm(state, bills) {
         <label class="field"><span>Amount</span><input class="input mono" name="amount" inputmode="decimal" required value="${esc(state.amount || '')}" placeholder="0"></label>
         <label class="field"><span>Paid on</span><input class="input" type="date" name="paid_on" value="${esc(state.paid_on)}"></label>
       </div>
-      <label class="field"><span>Paid by</span><input class="input" name="payer" maxlength="160" value="${esc(state.payer || '')}" placeholder="Client or company name"></label>
+      <div class="grid-2">
+        <label class="field"><span>Sender name</span><input class="input" name="payer" maxlength="160" value="${esc(state.payer || '')}" placeholder="Person who paid"></label>
+        <label class="field"><span>Receiver name</span><input class="input" name="receiver" maxlength="160" value="${esc(state.receiver || '')}" placeholder="Person or business paid"></label>
+      </div>
       <div class="grid-2">
         <label class="field"><span>Method</span><select class="select" name="method">${PAYMENT_METHODS.map((m) => `<option ${m === state.method ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
         <label class="field"><span>UTR / reference</span><input class="input mono" name="reference" maxlength="120" placeholder="12 digit UTR"></label>
@@ -101,6 +119,10 @@ function newForm(state, bills) {
       <label class="check" data-record ${state.document_id ? '' : 'hidden'}><input type="checkbox" name="record_payment" ${state.record ? 'checked' : ''}>
         <span>Record this payment on the bill<br><small class="muted">Adds it to the bill's payments, so the balance goes down.</small></span></label>
     </div>
+  </section>
+  <section class="section"><h2 class="section-title"><span class="idx">03</span>Details to show</h2>
+    <p class="muted" style="font-size:13px">Choose what appears on the proof, shared page and saved image. The original screenshot keeps all of its details.</p>
+    ${visibilityControls(state.visibility)}
   </section>
   <section class="section"><button class="btn btn--primary btn--block" type="submit">${icons.check}<span>Create payment page</span></button></section>`;
 }
@@ -113,7 +135,9 @@ async function mountNew(el, query) {
   const state = {
     document_id: linked?.id || null, business_id: linked?.business_id || store.settings.defaultBusinessId,
     amount: linked?.balance || '', payer: linked?.client?.name || '', currency: linked?.currency || store.settings.documents.currency,
-    method: 'UPI', reference: '', paid_on: localToday(), note: '', image: null, record: Boolean(linked && linked.balance > 0),
+    receiver: settingsFor(linked?.business_id || store.settings.defaultBusinessId).business.name || '', visibility: proofVisibility(),
+    method: 'UPI', reference: '', paid_on: localToday(), note: '', image: null, show_image: false,
+    record: Boolean(linked && linked.balance > 0),
   };
 
   el.innerHTML = `<div class="page-head">
@@ -126,7 +150,8 @@ async function mountNew(el, query) {
   const form = $('[data-form]', el);
   if (form.business_id) form.business_id.disabled = Boolean(state.document_id);
   const preview = () => {
-    const c = { ...state, document: linked && state.document_id ? { number: bills.find((d) => d.id === state.document_id)?.number } : null };
+    const c = { ...state, image_src: state.show_image ? state.image : null,
+      document: state.document_id ? { number: bills.find((d) => d.id === state.document_id)?.number } : null };
     const s = settingsFor(state.business_id);
     const box = $('[data-preview]', el);
     box.innerHTML = proofCardHtml(c, s.business, s.documents.locale);
@@ -134,15 +159,96 @@ async function mountNew(el, query) {
     requestAnimationFrame(() => setTimeout(() => box.classList.add('still'), 1200));
   };
 
-  const setShot = async (file) => {
+  let shotVersion = 0;
+  let reading = false;
+  let destroyed = false;
+  const automatic = new Map();
+  const status = $('[data-shot-status]', el);
+  const retry = $('[data-shot-retry]', el);
+  const submit = $('[type=submit]', form);
+  const edited = new Set();
+  const resetAutomatic = () => {
+    for (const [name, { before, after }] of automatic) {
+      if (!edited.has(name) && String(state[name]) === String(after)) {
+        state[name] = before;
+        form.elements.namedItem(name).value = before;
+      }
+    }
+    automatic.clear();
+  };
+  const readDetails = async (version) => {
+    const before = { ...state };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 35_000);
     try {
-      state.image = await readScreenshot(file);
+      const result = await api('/confirmations/extract', { method: 'POST', body: { image: state.image }, signal: controller.signal });
+      if (destroyed || version !== shotVersion) return;
+      const filled = [];
+      const labels = { amount: 'amount', paid_on: 'date', payer: 'sender', receiver: 'receiver', reference: 'UTR', method: 'method' };
+      for (const [name, value] of Object.entries(result.fields || {})) {
+        if (!(name in labels) || edited.has(name) || state[name] !== before[name]) continue;
+        automatic.set(name, { before: automatic.get(name)?.before ?? state[name], after: value });
+        state[name] = value;
+        form.elements.namedItem(name).value = value;
+        filled.push(labels[name]);
+      }
+      status.textContent = filled.length ? `Filled ${filled.join(', ')}. Review the details before creating the proof.`
+        : 'No new details could be filled. Enter the missing details or try a clearer screenshot.';
+      preview();
+    } catch (err) {
+      if (destroyed || version !== shotVersion) return;
+      status.textContent = `${err.message || 'Could not read the screenshot.'} Your screenshot is attached; you can fill the details yourself.`;
+    } finally {
+      clearTimeout(timeout);
+      if (!destroyed && version === shotVersion) {
+        reading = false;
+        submit.disabled = false;
+        retry.hidden = false;
+        status.removeAttribute('aria-busy');
+      }
+    }
+  };
+  const startReading = (version) => {
+    reading = true;
+    submit.disabled = true;
+    retry.hidden = true;
+    status.setAttribute('aria-busy', 'true');
+    status.textContent = 'Reading payment details… You can keep editing the fields.';
+    return readDetails(version);
+  };
+  const setShot = async (file) => {
+    const version = ++shotVersion;
+    reading = true;
+    submit.disabled = true;
+    retry.hidden = true;
+    status.textContent = 'Preparing screenshot…';
+    try {
+      const image = await readScreenshot(file);
+      if (destroyed || version !== shotVersion) return;
+      resetAutomatic();
+      state.image = image;
+      form.show_image.disabled = false;
       $('[data-shot-view]', el).innerHTML = `<img src="${state.image}" alt="Payment screenshot"><button class="btn btn--sm" type="button" data-shot-rm>${icons.x}<span>Remove</span></button>`;
-    } catch (err) { toastError(err); }
+      preview();
+      await startReading(version);
+    } catch (err) {
+      if (destroyed || version !== shotVersion) return;
+      reading = false;
+      submit.disabled = false;
+      retry.hidden = !state.image;
+      status.textContent = err.message;
+      toastError(err);
+    }
   };
 
   form.addEventListener('input', (e) => {
     const { name, value, checked } = e.target;
+    if (e.target.dataset.proofField) {
+      state.visibility[e.target.dataset.proofField] = checked;
+      preview();
+      return;
+    }
+    if (['amount', 'payer', 'receiver', 'paid_on', 'reference', 'method'].includes(name)) edited.add(name);
     if (name === 'document_id') {
       const doc = bills.find((d) => d.id === Number(value));
       state.document_id = doc?.id || null;
@@ -152,24 +258,50 @@ async function mountNew(el, query) {
         form.payer.value = state.payer;
         if (form.business_id) form.business_id.value = state.business_id;
         form.record_payment.checked = doc.balance > 0;
+        state.record = doc.balance > 0;
+        edited.add('amount');
+        edited.add('payer');
       }
       $('[data-record]', el).hidden = !doc;
       if (form.business_id) form.business_id.disabled = Boolean(doc);
     } else if (name === 'business_id') state.business_id = Number(value);
     else if (name === 'amount') state.amount = Number(value) || 0;
+    else if (name === 'show_image') state.show_image = checked;
     else if (name in state) state[name] = value;
     else if (name === 'record_payment') state.record = checked;
     else if (name === 'shot' && e.target.files[0]) setShot(e.target.files[0]);
+    if (['document_id', 'business_id'].includes(name) && !edited.has('receiver') && !automatic.has('receiver')) {
+      state.receiver = settingsFor(state.business_id).business.name || '';
+      form.receiver.value = state.receiver;
+    }
     preview();
   });
   form.addEventListener('click', (e) => {
+    if (e.target.closest('[data-shot-retry]')) {
+      if (!reading && state.image) startReading(++shotVersion);
+      return;
+    }
     if (!e.target.closest('[data-shot-rm]')) return;
     e.preventDefault();
+    ++shotVersion;
+    resetAutomatic();
+    reading = false;
+    submit.disabled = false;
     state.image = null;
+    state.show_image = false;
+    form.show_image.checked = false;
+    form.show_image.disabled = true;
     form.shot.value = '';
+    retry.hidden = true;
+    status.removeAttribute('aria-busy');
+    status.textContent = 'Screenshot removed. You can still enter the payment details.';
     $('[data-shot-view]', el).innerHTML = `${icons.image}<span><b>Add the payment screenshot</b></span>`;
+    preview();
   });
   const drop = $('[data-drop]', el);
+  drop.addEventListener('keydown', (e) => {
+    if (e.target === drop && ['Enter', ' '].includes(e.key)) { e.preventDefault(); form.shot.click(); }
+  });
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => {
@@ -185,13 +317,15 @@ async function mountNew(el, query) {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (reading) { toast('Wait for the screenshot to finish reading', 'err'); return; }
     if (!(Number(state.amount) > 0)) { toast('Enter the amount that was paid', 'err'); form.amount.focus(); return; }
     const btn = $('[type=submit]', form);
     btn.disabled = true;
     try {
       const made = await post('/confirmations', {
         document_id: state.document_id, business_id: state.business_id, amount: state.amount, currency: state.currency,
-        payer: state.payer, method: state.method, reference: state.reference, paid_on: state.paid_on, note: state.note,
+        payer: state.payer, receiver: state.receiver, visibility: state.visibility,
+        method: state.method, reference: state.reference, paid_on: state.paid_on, note: state.note,
         image: state.image, show_image: form.show_image.checked, record_payment: Boolean(state.document_id && form.record_payment.checked),
       });
       toast(made.payment_id ? 'Page ready and payment recorded' : 'Page ready');
@@ -203,13 +337,14 @@ async function mountNew(el, query) {
   });
 
   preview();
-  return { destroy: () => document.removeEventListener('paste', onPaste) };
+  return { destroy: () => { destroyed = true; ++shotVersion; document.removeEventListener('paste', onPaste); } };
 }
 
 /* ---------- detail ---------- */
 function whatsappText(c) {
+  c = visibleProof(c);
   const biz = settingsFor(c.business_id).business.name;
-  return `Hi ${c.payer || ''}, we received your payment of ${money(c.amount, c.currency)}${c.document_number ? ` for ${c.document_number}` : ''}. Thank you!${biz ? `\n${biz}` : ''}\n${c.link}`;
+  return `Hi${c.payer ? ` ${c.payer}` : ''}, we received your payment${c.amount !== undefined ? ` of ${money(c.amount, c.currency)}` : ''}${c.visibility.document && c.document_number ? ` for ${c.document_number}` : ''}. Thank you!${biz ? `\n${biz}` : ''}\n${c.link}`;
 }
 
 function detailMarkup(c) {
@@ -241,6 +376,10 @@ function detailMarkup(c) {
           ${c.has_image ? `<a href="/api/confirmations/${c.id}/image" target="_blank" rel="noopener" class="shot-thumb"><img src="/api/confirmations/${c.id}/image" alt="Payment screenshot" loading="lazy"></a>
             <label class="check"><input type="checkbox" data-act="toggle-image" ${c.show_image ? 'checked' : ''}><span>Show the screenshot on the page</span></label>` : '<p class="muted" style="margin:0;font-size:13px">No screenshot attached.</p>'}
         </section>
+        <section class="card card-pad stack" style="gap:12px"><span class="label">Details to show</span>
+          ${visibilityControls(c.visibility, true)}
+          <small class="muted">These choices also apply to the shared page and saved image. The screenshot keeps its original details.</small>
+        </section>
         <button class="btn btn--ghost btn--block" data-act="delete" style="color:var(--red)">${icons.trash}<span>Delete page</span></button>
       </aside>
     </div>`;
@@ -254,8 +393,21 @@ async function mountDetail(el, id) {
     async copy() { await copyText(c.link); toast('Link copied'); },
     image: () => downloadProofCard(cardFor(c)),
     async 'toggle-image'(target) {
-      c = await put(`/confirmations/${id}`, { show_image: target.checked });
-      toast(c.show_image ? 'Screenshot is on the page' : 'Screenshot hidden');
+      target.disabled = true;
+      try {
+        c = await put(`/confirmations/${id}`, { show_image: target.checked });
+        el.innerHTML = detailMarkup(c);
+        toast(c.show_image ? 'Screenshot is on the page' : 'Screenshot hidden');
+      } catch (err) { target.checked = !target.checked; throw err; }
+      finally { target.disabled = false; }
+    },
+    async visibility(target) {
+      target.disabled = true;
+      try {
+        c = await put(`/confirmations/${id}`, { visibility: { [target.dataset.proofField]: target.checked } });
+        el.innerHTML = detailMarkup(c);
+      } catch (err) { target.checked = !target.checked; throw err; }
+      finally { target.disabled = false; }
     },
     async delete() {
       const extra = c.payment_id ? ' The payment stays recorded on the bill. Remove it there if it was wrong.' : '';

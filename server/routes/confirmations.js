@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import {
-  listConfirmations, getConfirmation, createConfirmation, setShowImage, deleteConfirmation, imagePath,
+  listConfirmations, getConfirmation, createConfirmation, updateConfirmation, deleteConfirmation, imagePath,
 } from '../repos/confirmations.js';
 import { baseUrl } from '../sender.js';
-import { HttpError, v } from '../util.js';
+import { HttpError, v, asyncH } from '../util.js';
+import { extractPaymentScreenshot } from '../payment-screenshot.js';
 
 export const confirmationsRouter = Router();
 
@@ -14,9 +15,13 @@ confirmationsRouter.get('/', (req, res) => {
   res.json(listConfirmations({ document_id: docId }).map((row) => withLink(row, req)));
 });
 confirmationsRouter.post('/', (req, res) => res.status(201).json(withLink(createConfirmation(req.body || {}), req)));
+confirmationsRouter.post('/extract', asyncH(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await extractPaymentScreenshot(req.body?.image));
+}));
 confirmationsRouter.get('/:id', (req, res) => res.json(withLink(getConfirmation(v.id(req.params.id)), req)));
 confirmationsRouter.put('/:id', (req, res) => {
-  res.json(withLink(setShowImage(v.id(req.params.id), Boolean(req.body?.show_image)), req));
+  res.json(withLink(updateConfirmation(v.id(req.params.id), req.body || {}), req));
 });
 confirmationsRouter.delete('/:id', (req, res) => {
   deleteConfirmation(v.id(req.params.id));

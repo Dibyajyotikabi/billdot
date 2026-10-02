@@ -16,7 +16,7 @@
   padding: var(--nd-pad);
   background: var(--nd-paper);
   color: var(--nd-ink);
-  font: 400 9pt/1.5 'Space Grotesk', system-ui, sans-serif;
+  font: 400 9pt/1.5 var(--font);
   display: flex;
   flex-direction: column;
   gap: 8mm;
@@ -31,11 +31,11 @@
 .nd--letter { width: 215.9mm; min-height: 279.4mm; }
 .nd--a5 { width: 148mm; min-height: 210mm; --nd-pad: 10mm; gap: 5.5mm; font-size: 7.6pt; }
 
-.nd .dot { font-family: 'Doto', 'Space Mono', monospace; font-weight: 900; letter-spacing: 0.02em; }
-.nd-mono, .nd-meta-v, .nd-totals dd, .nd-pay-list dd { font-family: 'Space Mono', ui-monospace, monospace; }
+.nd .dot { font-family: var(--dot); font-weight: 900; letter-spacing: 0.02em; }
+.nd-mono, .nd-meta-v, .nd-totals dd, .nd-pay-list dd { font-family: var(--mono); }
 
 .nd-label {
-  font: 400 6.6pt/1.4 'Space Mono', ui-monospace, monospace;
+  font: 400 6.6pt/1.4 var(--mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--nd-muted);
@@ -77,7 +77,7 @@
   align-items: center;
   gap: 1.6mm;
   margin-bottom: 2.5mm;
-  font: 6.6pt/1 'Space Mono', monospace;
+  font: 6.6pt/1 var(--mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--nd-muted);
@@ -114,7 +114,7 @@
 /* items */
 .nd-items { width: 100%; border-collapse: collapse; }
 .nd-items th {
-  font: 400 6.4pt/1 'Space Mono', monospace;
+  font: 400 6.4pt/1 var(--mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--nd-muted);
@@ -127,7 +127,7 @@
 .nd-items th:first-child, .nd-items td:first-child { padding-left: 0; }
 .nd-items th:last-child, .nd-items td:last-child { padding-right: 0; }
 .nd-items .nd-r { text-align: right; white-space: nowrap; }
-.nd-items .nd-n { width: 8mm; font: 7pt 'Space Mono', monospace; color: var(--nd-red); }
+.nd-items .nd-n { width: 8mm; font: 7pt var(--mono); color: var(--nd-red); }
 .nd-item { font-weight: 500; }
 .nd-desc { color: var(--nd-muted); font-size: 0.92em; margin-top: 0.6mm; }
 .nd-unit { color: var(--nd-muted); font-size: 0.85em; }
@@ -150,9 +150,9 @@
   align-items: baseline;
 }
 .nd-grand dt { font-weight: 600; }
-.nd-grand dd { font-family: 'Doto', monospace !important; font-size: 17pt; line-height: 1; }
+.nd-grand dd { font-family: var(--dot) !important; font-size: 17pt; line-height: 1; }
 .nd--a5 .nd-grand dd { font-size: 12.5pt; }
-.nd-cur { font: 6.4pt 'Space Mono', monospace; color: var(--nd-muted); letter-spacing: 0.1em; margin-left: 1mm; }
+.nd-cur { font: 6.4pt var(--mono); color: var(--nd-muted); letter-spacing: 0.1em; margin-left: 1mm; }
 .nd-due dt, .nd-due dd { font-weight: 700; color: var(--nd-red); }
 
 .nd-pay { border: 0.2mm dashed var(--nd-ink); border-radius: 2.5mm; padding: 4mm; }
@@ -163,7 +163,7 @@
 .nd-small { font-size: 0.9em; color: #3a3a38; margin-top: 2mm !important; word-break: break-all; }
 .nd-qr { margin: 0; text-align: center; flex: none; }
 .nd-qr img { width: 24mm; height: 24mm; display: block; }
-.nd-qr figcaption { font: 5.8pt 'Space Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--nd-muted); margin-top: 1mm; }
+.nd-qr figcaption { font: 5.8pt var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--nd-muted); margin-top: 1mm; }
 
 /* footer */
 .nd-foot { display: grid; grid-template-columns: 1fr 1fr 52mm; gap: 8mm; margin-top: auto; align-items: end; }
@@ -177,7 +177,7 @@
   gap: 4mm;
   padding-top: 3mm;
   border-top: 0.2mm dotted var(--nd-ink);
-  font: 6.6pt 'Space Mono', monospace;
+  font: 6.6pt var(--mono);
   letter-spacing: 0.06em;
   color: var(--nd-muted);
 }
@@ -195,7 +195,7 @@
   top: 58mm;
   right: 14mm;
   transform: rotate(-9deg);
-  font: 900 30pt/1 'Doto', monospace;
+  font: 900 30pt/1 var(--dot);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--nd-red);
@@ -214,7 +214,7 @@
   min-height: 0;
   padding: 5mm 4mm 7mm;
   gap: 1.2mm;
-  font: 400 8.4pt/1.4 'Space Mono', ui-monospace, monospace;
+  font: 400 8.4pt/1.4 var(--mono);
 }
 .nd--thermal58 { width: 58mm; padding: 4mm 2.5mm 6mm; font-size: 7.2pt; }
 .nd-thermal .nd-logo { align-self: center; max-height: 12mm; margin: 0 0 1mm; object-position: center; }

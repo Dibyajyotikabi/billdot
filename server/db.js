@@ -137,6 +137,13 @@ db.exec(`
 // Columns added after the first release. SQLite has no ADD COLUMN IF NOT EXISTS.
 const hasColumn = (table, column) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
 if (!hasColumn('documents', 'business_id')) db.exec('ALTER TABLE documents ADD COLUMN business_id INTEGER');
+if (!hasColumn('confirmations', 'receiver')) db.exec("ALTER TABLE confirmations ADD COLUMN receiver TEXT NOT NULL DEFAULT ''");
+if (!hasColumn('confirmations', 'visibility')) db.exec("ALTER TABLE confirmations ADD COLUMN visibility TEXT NOT NULL DEFAULT '{}'");
+if (!hasColumn('confirmations', 'direction')) {
+  db.exec("ALTER TABLE confirmations ADD COLUMN direction TEXT NOT NULL DEFAULT 'sent'");
+  db.exec("UPDATE confirmations SET direction = 'received' WHERE payment_id IS NOT NULL");
+}
+if (!hasColumn('confirmations', 'icon_style')) db.exec("ALTER TABLE confirmations ADD COLUMN icon_style TEXT NOT NULL DEFAULT 'arrow'");
 db.exec('CREATE INDEX IF NOT EXISTS documents_business ON documents (business_id)');
 
 export function transaction(fn) {

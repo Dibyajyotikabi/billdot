@@ -6,6 +6,7 @@ import { sendUpiSvg } from '../upi.js';
 import { hasSession, rateLimit } from '../auth.js';
 import { DOC_TYPES } from '../../public/js/shared/doc-types.js';
 import { asyncH, HttpError, v } from '../util.js';
+import { visibleProof } from '../../public/js/shared/proof-details.js';
 
 export const publicRouter = Router();
 const writeLimiter = rateLimit({ limit: 20, windowMs: 60 * 60 * 1000 });
@@ -16,11 +17,13 @@ publicRouter.get('/c/:token', (req, res) => {
   const showDoc = c.document_token && c.document_status !== 'draft';
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    confirmation: {
-      amount: c.amount, currency: c.currency, payer: c.payer, method: c.method, reference: c.reference,
+    confirmation: visibleProof({
+      amount: c.amount, currency: c.currency, payer: c.payer, receiver: c.receiver, method: c.method, reference: c.reference,
+      visibility: c.visibility,
+      direction: c.direction, icon_style: c.icon_style,
       paid_on: c.paid_on, note: c.note, created_at: c.created_at, has_image: c.show_image && c.has_image,
       document: showDoc ? { number: c.document_number, type: c.document_type, token: c.document_token } : null,
-    },
+    }),
     settings: clientFacingSettings(settingsFor(c.business_id)),
     isOwner: hasSession(req),
   });
@@ -29,7 +32,7 @@ publicRouter.get('/c/:token', (req, res) => {
 publicRouter.get('/c/:token/image', (req, res) => {
   const c = getConfirmationByToken(req.params.token);
   if (!c.show_image) throw new HttpError(404, 'No screenshot on this page.');
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('Cache-Control', 'no-store');
   res.sendFile(imagePath(c));
 });
 

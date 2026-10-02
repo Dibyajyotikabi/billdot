@@ -10,6 +10,7 @@ import { PAYMENT_METHODS } from '../../public/js/shared/doc-types.js';
 import { localToday } from '../../public/js/shared/format.js';
 import { round2 } from '../../public/js/shared/calc.js';
 import { HttpError, newToken, nowIso, v } from '../util.js';
+import { proofVisibility, proofIconStyle } from '../../public/js/shared/proof-details.js';
 
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -38,7 +39,12 @@ export function imagePath(row) {
   return row?.image ? path.join(UPLOAD_DIR, path.basename(row.image)) : null;
 }
 
-const hydrate = (row) => (row ? { ...row, show_image: Boolean(row.show_image), has_image: Boolean(row.image) } : null);
+const hydrate = (row) => {
+  if (!row) return null;
+  let visibility;
+  try { visibility = JSON.parse(row.visibility); } catch { visibility = {}; }
+  return { ...row, visibility: proofVisibility(visibility), show_image: Boolean(row.show_image), has_image: Boolean(row.image) };
+};
 
 const SELECT = `SELECT c.*, d.number AS document_number, d.type AS document_type, d.token AS document_token,
     d.status AS document_status
@@ -66,13 +72,17 @@ export function createConfirmation(input = {}) {
   const businessId = doc?.business_id
     || (businessExists(input.business_id) ? Number(input.business_id) : defaultBusinessId());
   const settings = settingsFor(businessId);
+  const direction = v.oneOf(input.direction, ['sent', 'received'], 'sent');
+  if (direction === 'sent' && input.record_payment) throw new HttpError(400, 'Sent payments cannot reduce a bill’s receivable balance. Choose Payment received to record an incoming payment.');
   const amount = round2(v.num(input.amount, { min: 0 }));
   if (amount <= 0) throw new HttpError(400, 'Enter the amount that was paid.');
   const currency = (v.str(input.currency, 3).toUpperCase() || doc?.currency || settings.documents.currency);
   if (!/^[A-Z]{3}$/.test(currency)) throw new HttpError(400, 'Currency must be a 3-letter code like INR.');
   const row = {
     token: newToken(),
-    payer: v.str(input.payer, 160) || doc?.client?.name || '',
+    payer: v.str(input.payer, 160) || (direction === 'sent' ? settings.business.name : doc?.client?.name) || '',
+    receiver: v.str(input.receiver, 160) || (direction === 'sent' ? doc?.client?.name : settings.business.name) || '',
+    direction, icon_style: proofIconStyle(input.icon_style || settings.appearance.proofIcon),
     method: v.oneOf(input.method, PAYMENT_METHODS, 'UPI'),
     reference: v.str(input.reference, 120),
     paid_on: v.date(input.paid_on) || localToday(),
@@ -91,10 +101,10 @@ export function createConfirmation(input = {}) {
         paymentId = db.prepare('SELECT id FROM payments WHERE document_id = ? ORDER BY id DESC LIMIT 1').get(doc.id)?.id ?? null;
       }
       const { lastInsertRowid } = db.prepare(`INSERT INTO confirmations (token, business_id, document_id, payment_id, amount,
-          currency, payer, method, reference, paid_on, note, image, show_image, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        row.token, businessId, doc?.id ?? null, paymentId, amount, currency, row.payer, row.method, row.reference,
-        row.paid_on, row.note, image, input.show_image && image ? 1 : 0, nowIso(),
+          currency, payer, receiver, direction, icon_style, method, reference, paid_on, note, image, show_image, visibility, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        row.token, businessId, doc?.id ?? null, paymentId, amount, currency, row.payer, row.receiver, row.direction, row.icon_style, row.method, row.reference,
+        row.paid_on, row.note, image, input.show_image && image ? 1 : 0, JSON.stringify(proofVisibility(input.visibility)), nowIso(),
       );
       return Number(lastInsertRowid);
     });
@@ -108,8 +118,18 @@ export function createConfirmation(input = {}) {
 }
 
 export function setShowImage(id, show) {
+  return updateConfirmation(id, { show_image: show });
+}
+
+export function updateConfirmation(id, patch = {}) {
   const row = getConfirmation(id);
-  db.prepare('UPDATE confirmations SET show_image = ? WHERE id = ?').run(show && row.image ? 1 : 0, id);
+  const show = Object.hasOwn(patch, 'show_image') ? Boolean(patch.show_image) : row.show_image;
+  const visibility = proofVisibility({ ...row.visibility, ...patch.visibility });
+  const direction = v.oneOf(patch.direction, ['sent', 'received'], row.direction);
+  if (row.payment_id && direction !== 'received') throw new HttpError(409, 'This proof recorded an incoming bill payment. Create a separate proof for a sent payment.');
+  const icon = Object.hasOwn(patch, 'icon_style') ? proofIconStyle(patch.icon_style) : row.icon_style;
+  db.prepare('UPDATE confirmations SET show_image = ?, visibility = ?, direction = ?, icon_style = ? WHERE id = ?')
+    .run(show && row.image ? 1 : 0, JSON.stringify(visibility), direction, icon, id);
   emit('confirmation', { id });
   return getConfirmation(id);
 }

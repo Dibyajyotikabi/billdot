@@ -64,11 +64,17 @@ Payment proofs turn a payment into a "payment received" page you can send to the
 1. Open Payment proofs > New proof, or click Payment proof on an invoice.
 2. Add the UPI screenshot if you have one (drop it, paste it or pick it), then fill in the amount, date, method and UTR.
 3. Leave "Record this payment on the bill" ticked to add the payment to the invoice.
-4. Create the page. You get a `/p/...` link to share on WhatsApp, and Save image downloads a 1080x1350 PNG for a post or status.
+4. Create the page. You get a `/p/...` link to share on WhatsApp, and Save image downloads a 1080px-wide PNG. The receipt is 1080x1350; an included screenshot extends it below the receipt.
 
-The screenshot stays private until you tick "Show the screenshot on the page", since it can show account details. The app does not read the screenshot for you, so type the details in. Deleting a proof page does not remove the payment from the invoice.
+The app reads the screenshot on your computer and fills the details it can recognise, including separate sender and receiver names. Review the amount, date, names and UTR before creating the page; unclear or unfamiliar screenshots may need manual entry. Your edits are preserved while it reads.
+
+Details to show lets you hide the sender, receiver, transaction ID, amount, date, method, linked bill or note. These choices apply to the preview, shared page and saved image, and can also be changed after creating a proof. The original screenshot still contains its own details.
+
+The screenshot stays private until you tick "Include screenshot as payment proof", since it can show account details. When selected, it appears in the preview, shared page and saved image. Deleting a proof page does not remove the payment from the invoice.
 
 ## Other settings
+
+Settings > Appearance changes the font throughout the app, documents, shared pages and saved payment images. Choose Billdot original, Space Grotesk, Space Mono, System sans, Arial or Classic serif. Fonts work offline.
 
 - `PORT` changes the port (default 4321).
 - `DATA_DIR` changes where the database is stored (default `./data`).
