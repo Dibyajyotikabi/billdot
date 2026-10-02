@@ -1,3 +1,5 @@
+![Billdot — local-first billing for agencies](assets/billdot-banner.png)
+
 # Billdot
 
 Local billing for a small agency. Invoices, quotations, proforma invoices, receipts, delivery notes and credit notes, in A4, US Letter, A5 and 80mm or 58mm thermal sizes.
