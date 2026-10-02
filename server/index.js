@@ -13,9 +13,11 @@ import { startBackups } from './backup.js';
 import { startTunnel } from './tunnel.js';
 import { saveSettings } from './settings.js';
 import { PORT } from './sender.js';
+import { assetServer } from './assets.js';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const app = express();
+const assets = assetServer(PUBLIC_DIR);
 
 app.disable('x-powered-by');
 app.set('trust proxy', behindProxy ? 1 : 'loopback');
@@ -34,6 +36,8 @@ app.use((req, res, next) => {
     "object-src 'none'",
   ].join('; '));
   if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  // Billdot is private. Keep every page of it out of search results.
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -53,8 +57,11 @@ app.use('/api', requireAuth, apiRouter);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
 app.get('/healthz', (req, res) => res.type('text').send('ok'));
-app.get('/d/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'doc.html')));
-app.get('/p/:token', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'paid.html')));
+app.get('/robots.txt', (req, res) => res.type('text').send('User-agent: *\nAllow: /\n'));
+app.get(['/', '/index.html'], assets.sendPage('index.html'));
+app.get('/d/:token', assets.sendPage('doc.html'));
+app.get('/p/:token', assets.sendPage('paid.html'));
+app.use('/v/:build', assets.versioned);
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, file) {
     // Revalidate app files on every load so a deploy shows up at once, even behind Cloudflare.
