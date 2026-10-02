@@ -1,0 +1,44 @@
+/* Client-facing bill page. Dot grid backdrop, one large dot-matrix number, the sheet below. */
+
+.pub {
+  min-height: 100dvh;
+  background-image: radial-gradient(var(--line-strong) 1px, transparent 1.3px);
+  background-size: 18px 18px;
+}
+#pub { width: min(880px, 100%); margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 22px; }
+
+.pub-loading, .pub-missing {
+  min-height: 70dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center;
+}
+.pub-loading { flex-direction: row; }
+
+.pub-owner {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px;
+  border-radius: var(--radius-s); background: var(--blue-soft); color: var(--blue); font-size: 13px;
+}
+.pub-owner a { font-weight: 600; }
+
+.pub-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pub-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; min-width: 0; }
+.pub-brand img { max-width: 140px; object-fit: contain; }
+
+.pub-hero {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-l);
+  padding: clamp(22px, 5vw, 36px); display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow);
+}
+.pub-amount { font: 900 clamp(40px, 11vw, 76px)/1 var(--dot); letter-spacing: 0.01em; margin: 6px 0 2px; word-break: break-word; }
+.pub-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.pub-actions .btn { min-height: 44px; }
+
+.pub-note { margin: 10px 0 0; padding: 12px 14px; border-radius: var(--radius-s); background: var(--green-soft); color: var(--green); font-size: 14px; }
+.pub-note--red { background: var(--red-soft); color: var(--red); }
+
+.pub-sheet { display: flex; justify-content: center; }
+.pub-sheet .sheet-fit { box-shadow: var(--sheet-shadow); }
+
+.pub-foot { text-align: center; color: var(--muted); font-size: 13px; }
+.pub-foot a { color: var(--ink-2); }
+
+@media (max-width: 560px) {
+  .pub-actions .btn { flex: 1 1 calc(50% - 5px); justify-content: center; }
+}

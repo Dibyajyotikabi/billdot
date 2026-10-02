@@ -1,0 +1,78 @@
+/* Payment received card. Always dark, like a phone screen, on any page theme. */
+
+/* The wrapper is the size container, so the card's own padding scales with it too. */
+.proof-box { container-type: inline-size; width: 100%; }
+.proof {
+  --p-bg: #0a0a0a; --p-dot: #1d1d1d; --p-ink: #f1f1ed; --p-muted: #8b8b85; --p-line: #2a2a2a; --p-green: #4cc38a;
+  position: relative; isolation: isolate; overflow: hidden;
+  width: 100%; aspect-ratio: 4 / 5;
+  display: flex; flex-direction: column;
+  padding: 7.8cqw; border-radius: var(--radius-l);
+  background: var(--p-bg); color: var(--p-ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 30px 60px -30px rgba(0, 0, 0, 0.55);
+}
+.proof::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background-image: radial-gradient(var(--p-dot) 1.1px, transparent 1.4px);
+  background-size: 2.5cqw 2.5cqw;
+}
+.proof-head { display: flex; align-items: center; gap: 3cqw; min-height: 7cqw; }
+.proof-logo { background: #fff; border-radius: 1.2cqw; padding: 0.9cqw; display: inline-flex; }
+.proof-logo img { height: 5.2cqw; max-width: 18cqw; object-fit: contain; }
+.proof-biz { font: 600 3.5cqw/1.1 var(--font); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proof-rec { width: 1.7cqw; height: 1.7cqw; border-radius: 50%; background: var(--red); box-shadow: 0 0 2cqw var(--red); }
+
+.proof-label {
+  display: flex; align-items: center; gap: 2.6cqw; margin-top: 13cqw;
+  font: 700 2.8cqw/1 var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--p-green);
+}
+.proof-led { width: 1.9cqw; height: 1.9cqw; border-radius: 50%; background: var(--p-green); box-shadow: 0 0 2.4cqw var(--p-green); }
+.proof-amount {
+  font: 900 17cqw/1 var(--dot); margin-top: 3cqw; letter-spacing: 0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: clip;
+}
+.proof-payer { font: 500 3.7cqw/1.2 var(--font); color: var(--p-muted); margin-top: 2.4cqw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.proof-rows {
+  margin: auto 0 0; padding: 1.2cqw 0;
+  border-top: 2px dashed var(--p-line); border-bottom: 2px dashed var(--p-line);
+}
+.proof-rows div { display: flex; justify-content: space-between; align-items: baseline; gap: 4cqw; padding: 2.2cqw 0; }
+.proof-rows dt { font: 400 2.4cqw/1 var(--mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--p-muted); }
+.proof-rows dd { margin: 0; font: 700 3cqw/1.2 var(--mono); text-align: right; overflow-wrap: anywhere; }
+.proof-note { margin: 2.6cqw 0 0; font-size: 2.9cqw; color: var(--p-muted); }
+
+.proof-foot { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 5cqw; }
+.proof-check { display: grid; grid-template-columns: repeat(9, 2.4cqw); grid-auto-rows: 2.4cqw; }
+.proof-check i { margin: auto; width: 0.9cqw; height: 0.9cqw; border-radius: 50%; background: #1f1f1f; }
+.proof-check i.on {
+  width: 1.7cqw; height: 1.7cqw; background: var(--p-green); box-shadow: 0 0 1.6cqw var(--p-green);
+  animation: proof-led 420ms var(--ease) both; animation-delay: calc(var(--i) * 14ms + 250ms);
+}
+.proof-thanks { font: 600 4.1cqw/1 var(--font); }
+
+@keyframes proof-led { from { opacity: 0; transform: scale(0.2); } }
+.proof-amount, .proof-payer { animation: proof-rise 700ms var(--ease) both; }
+.proof-payer { animation-delay: 80ms; }
+@keyframes proof-rise { from { opacity: 0; transform: translateY(14px); } }
+.still .proof-check i.on, .still .proof-amount, .still .proof-payer { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .proof-check i.on, .proof-amount, .proof-payer { animation: none; }
+}
+
+/* Public page around the card */
+.paid-wrap { width: min(520px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.paid-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.paid-actions .btn { min-height: 44px; flex: 1 1 auto; justify-content: center; }
+.paid-shot {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow);
+}
+.paid-shot img { width: 100%; height: auto; max-height: 720px; object-fit: contain; border-radius: var(--radius-s); background: var(--surface-2); }
+.paid-doc {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); text-decoration: none;
+  transition: border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.paid-doc:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.paid-doc:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
