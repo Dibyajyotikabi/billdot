@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { renderDocument } from '../public/js/shared/render-doc.js';
 
 const PORT = 4400 + Math.floor(Math.random() * 500);
 const BASE = `http://localhost:${PORT}`;
@@ -89,6 +90,21 @@ test('Notion style and proof icon persist and invalid choices are ignored', asyn
   assert.equal(pub.confirmation.icon_style, 'seal');
   await call('DELETE', `/api/confirmations/${made.id}`);
   await call('PUT', '/api/settings', { appearance: { style: 'billdot', proofIcon: 'arrow' } });
+});
+
+test('signature image saves, shows above the signature name and can be removed', async () => {
+  const signature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  assert.equal((await call('PUT', '/api/settings', { business: { signature, signatory: 'Asha Sharma' } })).status, 200);
+  const settings = (await call('GET', '/api/settings')).body;
+  assert.equal(settings.business.signature, signature);
+  const html = renderDocument({ type: 'invoice', items: [] }, settings);
+  assert.ok(html.indexOf('nd-sign-img') < html.indexOf('Asha Sharma</div>'));
+  for (const bad of ['https://example.com/sign.png', 'data:image/svg+xml;base64,PHN2Zz4=', `data:image/png;base64,${'A'.repeat(700_001)}`]) {
+    assert.equal((await call('PUT', '/api/settings', { business: { signature: bad } })).status, 400);
+  }
+  assert.equal((await call('GET', '/api/settings')).body.business.signature, signature);
+  await call('PUT', '/api/settings', { business: { signature: '', signatory: '' } });
+  assert.equal((await call('GET', '/api/settings')).body.business.signature, '');
 });
 
 test('screenshot extraction rejects bad images and never creates a proof', async () => {

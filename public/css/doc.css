@@ -170,7 +170,8 @@
 .nd--a5 .nd-foot { grid-template-columns: 1fr 1fr 36mm; gap: 4mm; }
 .nd-foot p { color: #3a3a38; }
 .nd-sign { grid-column: 3; text-align: right; }
-.nd-sign-line { height: 12mm; border-bottom: 0.2mm solid var(--nd-ink); margin-bottom: 1.6mm; }
+.nd-sign-line { height: 12mm; border-bottom: 0.2mm solid var(--nd-ink); margin-bottom: 1.6mm; display: flex; align-items: flex-end; justify-content: flex-end; }
+.nd-sign-img { max-height: 14mm; max-width: 100%; object-fit: contain; object-position: right bottom; }
 .nd-bottom {
   display: flex;
   align-items: center;

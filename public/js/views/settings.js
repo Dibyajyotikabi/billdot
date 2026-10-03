@@ -91,18 +91,13 @@ const tabs = {
     </select><small>Applies to all businesses, documents, shared pages and saved payment images. Fonts work offline.</small></label>
     <div class="font-samples">${Object.entries(FONT_OPTIONS).map(([id, f]) => `<div style="font-family:${esc(fontTheme(id).display)}"><strong>${esc(f.label)}</strong><span>Billdot · ₹3,500.00 · Payment received</span></div>`).join('')}</div>`),
   business: () => businessSwitcher() + section(hasManyBusinesses() ? `${businessOf(editingId())?.code} details` : 'Your business', `
-    <div class="logo-drop">
-      ${current().business.logo ? `<img src="${esc(current().business.logo)}" alt="Logo">` : '<span class="muted">No logo</span>'}
-      <div class="row" style="gap:8px">
-        <label class="btn btn--sm">${icons.plus}<span>Upload logo</span><input type="file" accept="image/*" data-logo hidden></label>
-        ${current().business.logo ? '<button class="btn btn--ghost btn--sm" data-logo-rm type="button">Remove</button>' : ''}
-      </div>
-    </div>
+    ${imageField('logo', 'logo')}
     <div class="grid-2">${input('business.name', 'Business name')}${input('business.tagline', 'Tagline')}</div>
     <div class="grid-2">${input('business.email', 'Email', { type: 'email' })}${input('business.phone', 'Phone', { type: 'tel' })}</div>
     <div class="grid-2">${input('business.website', 'Website')}${input('business.taxId', 'Tax ID / GSTIN', { mono: true })}</div>
     ${area('business.address', 'Address')}
-    ${input('business.signatory', 'Signature name', { hint: 'Printed above the signature line. Leave empty to hide it.' })}`),
+    ${input('business.signatory', 'Signature name', { hint: 'Printed under the signature line.' })}
+    ${imageField('signature', 'signature', 'Shown above the signature name on invoices and quotes. A dark signature on a white or transparent background works best.')}`),
 
   payments: () => businessSwitcher() + section('How clients pay you', `
     <div class="grid-2">${input('payment.bankName', 'Bank')}${input('payment.accountName', 'Account name')}</div>
@@ -205,13 +200,29 @@ const numberPreview = (cfg) => {
   return `${prefix}${String(cfg.next || 1).padStart(Number(cfg.pad) || 1, '0')}`;
 };
 
+// Logo and signature uploads share one block and one save path.
+const IMAGE_SIZES = { logo: { width: 600, height: 240 }, signature: { width: 600, height: 200 } };
+const imageField = (key, label, hint = '') => {
+  const src = current().business[key];
+  return `<div class="logo-drop">
+      ${src ? `<img src="${esc(src)}" alt="${label}">` : `<span class="muted">No ${label}</span>`}
+      <div class="stack" style="gap:6px">
+        <div class="row" style="gap:8px">
+          <label class="btn btn--sm">${icons.plus}<span>Upload ${label}</span><input type="file" accept="image/*" data-image="${key}" hidden></label>
+          ${src ? `<button class="btn btn--ghost btn--sm" data-image-rm="${key}" type="button">Remove</button>` : ''}
+        </div>
+        ${hint ? `<small class="muted">${hint}</small>` : ''}
+      </div>
+    </div>`;
+};
+
 // Converts a picked image to a small PNG data URL so the settings stay light.
-function readLogo(file) {
+function readImage(file, { width, height }) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const scale = Math.min(1, 600 / img.width, 240 / img.height);
+      const scale = Math.min(1, width / img.width, height / img.height);
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
@@ -307,15 +318,15 @@ export async function mount(el, { params, refreshSettings }) {
   el.addEventListener('change', (e) => { if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onField(e); });
 
   el.addEventListener('change', async (e) => {
-    if (!e.target.matches('[data-logo]')) return;
-    const file = e.target.files[0];
-    if (!file) return;
+    const key = e.target.dataset.image;
+    const file = e.target.files?.[0];
+    if (!key || !file) return;
     try {
-      const logo = await readLogo(file);
-      await put(`/settings?business=${editingId()}`, { business: { logo } });
+      const image = await readImage(file, IMAGE_SIZES[key]);
+      await put(`/settings?business=${editingId()}`, { business: { [key]: image } });
       await refreshSettings();
       paint();
-      toast('Logo updated');
+      toast(key === 'logo' ? 'Logo saved' : 'Signature saved');
     } catch (err) { toastError(err); }
   });
 
@@ -346,8 +357,9 @@ export async function mount(el, { params, refreshSettings }) {
 
   el.addEventListener('click', async (e) => {
     const t = e.target;
-    if (t.closest('[data-logo-rm]')) {
-      await put(`/settings?business=${editingId()}`, { business: { logo: '' } }).catch(toastError);
+    if (t.closest('[data-image-rm]')) {
+      const key = t.closest('[data-image-rm]').dataset.imageRm;
+      await put(`/settings?business=${editingId()}`, { business: { [key]: '' } }).catch(toastError);
       await refreshSettings();
       paint();
     } else if (t.closest('[data-edit-biz]')) {

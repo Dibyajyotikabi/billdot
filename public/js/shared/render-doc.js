@@ -172,7 +172,7 @@ function renderPage(doc, settings, c, opts) {
       ${doc.notes ? `<div><div class="nd-label">Notes</div><p>${multiline(doc.notes)}</p></div>` : ''}
       ${doc.terms ? `<div><div class="nd-label">Terms</div><p>${multiline(doc.terms)}</p></div>` : ''}
       <div class="nd-sign">
-        <div class="nd-sign-line"></div>
+        <div class="nd-sign-line">${biz.signature ? `<img class="nd-sign-img" src="${e(biz.signature)}" alt="">` : ''}</div>
         <div class="nd-label">${e(biz.signatory || 'Authorised signatory')}</div>
       </div>
     </section>

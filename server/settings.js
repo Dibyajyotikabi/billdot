@@ -7,7 +7,7 @@ import { PROOF_ICONS } from '../public/js/shared/proof-details.js';
 export const DEFAULT_SETTINGS = {
   appearance: { font: 'original', style: 'billdot', proofIcon: 'arrow' },
   business: {
-    name: '', tagline: '', email: '', phone: '', website: '', address: '', taxId: '', logo: '', signatory: '',
+    name: '', tagline: '', email: '', phone: '', website: '', address: '', taxId: '', logo: '', signature: '', signatory: '',
   },
   payment: {
     bankName: '', accountName: '', accountNumber: '', ifsc: '', swift: '', upiId: '', paymentLink: '', instructions: '',
@@ -116,6 +116,10 @@ export function saveProfile(id, patch) {
     .run(JSON.stringify(profile), String(profile.business?.name || '').slice(0, 200), nowIso(), id);
 }
 
+const IMAGE_KEYS = new Set(['logo', 'signature']);
+const MAX_IMAGE_LENGTH = 700_000;
+const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
 // Only known keys survive; values are coerced to the type of the default.
 export function sanitize(defaults, patch) {
   if (!isObject(patch)) return {};
@@ -130,12 +134,16 @@ export function sanitize(defaults, patch) {
         : def;
     } else if (typeof def === 'number') out[key] = Number.isFinite(Number(value)) ? Number(value) : def;
     else if (typeof def === 'boolean') out[key] = Boolean(value);
-    else out[key] = String(value ?? '').slice(0, key === 'logo' ? 700_000 : 4000);
+    else out[key] = String(value ?? '').slice(0, IMAGE_KEYS.has(key) ? MAX_IMAGE_LENGTH : 4000);
   }
   return out;
 }
 
 export function saveSettings(patch, businessId = null) {
+  const signature = patch?.business?.signature;
+  if (signature && (String(signature).length > MAX_IMAGE_LENGTH || !IMAGE_DATA_URL.test(signature))) {
+    throw new HttpError(400, 'The signature must be a PNG, JPG or WebP image under 500 KB.');
+  }
   const clean = sanitize(DEFAULT_SETTINGS, patch);
   if (clean.appearance && !Object.hasOwn(FONT_OPTIONS, clean.appearance.font)) delete clean.appearance.font;
   if (clean.appearance && !Object.hasOwn(STYLE_OPTIONS, clean.appearance.style)) delete clean.appearance.style;
