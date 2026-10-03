@@ -166,6 +166,15 @@ test('several OCR readings are weighed together for the amount', () => {
   assert.deepEqual(parsePaymentTexts([]), {});
 });
 
+test('a ₹ read as 3 on both amount rows still gives the real amount', () => {
+  const fields = parsePaymentTexts([
+    'Paid to\nMr JAY PRAKASH PANDA\n37,700\nDebited from\nXXXXXX5510\n%7,700\nUTR: 276735677220',
+    'Paid to\n21\nMr JAY PRAKASH PANDA\n37,700\nDebited from\nXXXXXX5510\n37,700\nUTR: 276735677220',
+  ]);
+  assert.equal(fields.amount, 7700);
+  assert.equal(fields.receiver, 'Mr JAY PRAKASH PANDA');
+});
+
 test('the Hindi ₹ check corrects, confirms or drops English amount readings', () => {
   assert.equal(checkAmountWord('32,450', '₹2,450'), '₹2,450');
   assert.equal(checkAmountWord('217,100', '₹7,00'), '₹17,100');
