@@ -6,7 +6,7 @@ import english from '@tesseract.js-data/eng';
 import hindi from '@tesseract.js-data/hin';
 import { imageSize } from 'image-size';
 import { HttpError } from './util.js';
-import { parsePaymentText } from '../public/js/shared/payment-text.js';
+import { parsePaymentTexts } from '../public/js/shared/payment-text.js';
 
 export function decodeScreenshot(dataUrl) {
   const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
@@ -47,9 +47,8 @@ export async function extractPaymentScreenshot(dataUrl, enhancedUrl) {
       worker.once('exit', failed);
       timer = setTimeout(() => reject(new HttpError(408, 'Reading took too long. Try again or enter the details.')), 30_000);
     });
-    // Earlier readings win; later ones only fill fields that are still missing.
-    const readings = [...result.texts, result.native_text || ''].map(parsePaymentText);
-    return { fields: Object.assign({}, ...readings.reverse()), needs_review: true };
+    if (result.check_error) console.error('[ocr] amount check skipped:', result.check_error);
+    return { fields: parsePaymentTexts([...result.texts, result.native_text]), needs_review: true };
   } catch (err) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(422, 'Could not read this screenshot. Try a clearer image or enter the details.');

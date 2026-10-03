@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parsePaymentText } from '../public/js/shared/payment-text.js';
+import { parsePaymentText, parsePaymentTexts } from '../public/js/shared/payment-text.js';
+import { amountWords, checkAmountWord, checkArea, correctedText } from '../server/payment-amount-check.js';
 import { decodeScreenshot, extractPaymentScreenshot } from '../server/payment-screenshot.js';
 import { proofCardHtml } from '../public/js/shared/proof-html.js';
 import { visibleProof, proofVisibility, proofParties, proofIconStyle } from '../public/js/shared/proof-details.js';
@@ -134,7 +135,8 @@ test('reads PhonePe receipts when OCR drops or misreads the rupee sign', () => {
     amount: 17100, reference: '387273820823', paid_on: '2026-10-01', receiver: 'DIGBIJAY LENKA', method: 'UPI',
   });
   assert.equal(parsePaymentText('Paid to\n17,100\nBanking name: DIGBIJAY LENKA').receiver, 'DIGBIJAY LENKA');
-  assert.equal(parsePaymentText('Paid to\n217,100\n17,100').amount, undefined);
+  // ₹ read as 2 next to the clean reading is one amount, not two.
+  assert.equal(parsePaymentText('Paid to\n217,100\n17,100').amount, 17100);
 });
 
 test('reads dark bank receipts with a date pill and stray OCR marks', () => {
@@ -143,4 +145,58 @@ test('reads dark bank receipts with a date pill and stray OCR marks', () => {
   assert.deepEqual(parsePaymentText(text), {
     amount: 50000, reference: '627344932215', paid_on: '2026-09-30', payer: 'DIBYAJYOTI KABI', receiver: 'SEVEN SEAS SANITARY', method: 'Bank transfer',
   });
+});
+
+test('a % inside a masked account number is not a rupee sign', () => {
+  assert.equal(parsePaymentText('Paid to\nDIGBIJAY LENKA\n17,100\n*xk*xx%5371\nDebited from\nXXXXXX5510\n17,100').amount, 17100);
+  assert.equal(parsePaymentText('Paid to\n17,100\nXX%5371').amount, 17100);
+});
+
+test('the amount seen most often wins and a tie stays empty', () => {
+  assert.equal(parsePaymentText('Paid to\n32,450\n2,450').amount, 2450);
+  assert.equal(parsePaymentText('2,450\n2,450\n9,999').amount, 2450);
+  assert.equal(parsePaymentText('2,450\n9,999').amount, undefined);
+  assert.equal(parsePaymentText('₹1,250\n31,250').amount, 1250);
+});
+
+test('several OCR readings are weighed together for the amount', () => {
+  const fields = parsePaymentTexts(['Paid to\nDIGBIJAY LENKA\n32,450\nUTR: 412398765432', 'Paid to\nSomeone Else\n2,450\n2,450', '']);
+  assert.deepEqual(fields, { amount: 2450, reference: '412398765432', receiver: 'DIGBIJAY LENKA' });
+  assert.equal(parsePaymentTexts(['₹500', '₹750']).amount, undefined);
+  assert.deepEqual(parsePaymentTexts([]), {});
+});
+
+test('the Hindi ₹ check corrects, confirms or drops English amount readings', () => {
+  assert.equal(checkAmountWord('32,450', '₹2,450'), '₹2,450');
+  assert.equal(checkAmountWord('217,100', '₹7,00'), '₹17,100');
+  assert.equal(checkAmountWord('31,250', ',250'), '1,250');
+  assert.equal(checkAmountWord('17,100', '₹7,00'), '₹17,100');
+  assert.equal(checkAmountWord('17,100', '₹77,00'), '₹17,100');
+  assert.equal(checkAmountWord('21,500', '₹2,500'), '₹21,500');
+  assert.equal(checkAmountWord('%17,100', '₹7,400'), '₹17,100');
+  assert.equal(checkAmountWord('500', '₹500'), '₹500');
+  assert.equal(checkAmountWord('32,450', '₹2,480'), '');
+  assert.equal(checkAmountWord('32,450', '9,999'), null);
+  assert.equal(checkAmountWord('17,100', '7,00'), null);
+  assert.equal(checkAmountWord('17,100', ''), null);
+  assert.equal(checkAmountWord('UTR', '₹5'), null);
+});
+
+test('only amount-like words are checked, inside the image bounds', () => {
+  const word = (text) => ({ text, bbox: { x0: 0, y0: 0, x1: 1, y1: 1 } });
+  const lines = [[word('17,100')], [word('*xk*xx%5371')], [word('500')], [word('UTR:'), word('387273820823')], [word('on'), word('01')], [word('%2,450')]]
+    .map((words) => ({ words }));
+  assert.deepEqual(amountWords(lines).map((w) => w.text), ['17,100', '500', '%2,450']);
+  assert.deepEqual(checkArea({ x0: 10, y0: 50, x1: 200, y1: 100 }, { width: 210, height: 1000 }), { left: 0, top: 20, width: 210, height: 110 });
+  const fixes = new Map([[lines[0].words[0], '₹17,100'], [lines[2].words[0], '']]);
+  assert.equal(correctedText(lines, fixes), '₹17,100\n*xk*xx%5371\n\nUTR: 387273820823\non 01\n%2,450');
+  assert.equal(correctedText(lines, new Map()), null);
+});
+
+test('local OCR reads the amount on a dark PhonePe receipt where ₹ looks like 3', async () => {
+  const read = (name) => `data:image/jpeg;base64,${fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url)).toString('base64')}`;
+  const result = await extractPaymentScreenshot(read('phonepe-dark.jpg'), read('phonepe-dark-enhanced.jpg'));
+  assert.equal(result.fields.amount, 2450);
+  assert.equal(result.fields.reference, '412398765432');
+  assert.equal(result.fields.receiver, 'DIGBIJAY LENKA');
 });
